@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Image Resizer</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            max-width: 1000px; 
+            margin: 0 auto; 
+            padding: 20px; 
+        }
+        .image-container { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 20px; 
+            margin-top: 20px; 
+        }
+        .image-pair { 
+            flex: 0 0 45%; 
+            border: 1px solid #ddd; 
+            padding: 10px; 
+            text-align: center; 
+        }
+        img { 
+            max-width: 100%; 
+            height: auto; 
+        }
+        .form-container { 
+            margin-bottom: 20px; 
+        }
+        select, input { 
+            margin: 5px 0; 
+        }
+        .download-btn { 
+            display: inline-block; 
+            padding: 8px 16px; 
+            background-color: #4CAF50; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 4px; 
+            margin-top: 10px; 
+            font-size: 14px; 
+        }
+        .download-btn:hover { 
+            background-color: #45a049; 
+            cursor: pointer; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Resizer</h1>
+    
+    <div class="form-container">
+        <form method="post" enctype="multipart/form-data">
+            <input type="file" name="files[]" accept="image/*" multiple><br>
+            
+            <input type="radio" name="operation" value="percentage" checked> 
+            Resize by Percentage:
+            <input type="number" name="percentage" min="1" max="500" value="50">%<br>
+            
+            <input type="radio" name="operation" value="dimensions"> 
+            Resize to Dimensions:
+            <input type="number" name="width" min="1" placeholder="Width"> x 
+            <input type="number" name="height" min="1" placeholder="Height">px<br>
+            
+            Quality (JPEG only): 
+            <input type="number" name="quality" min="1" max="100" value="85"><br>
+            
+            Output Format:
+            <select name="format">
+                {% for format in output_formats %}
+                    <option value="{{ format }}" {% if format == 'JPEG' %}selected{% endif %}>{{ format }}</option>
+                {% endfor %}
+            </select><br>
+            
+            Resize Method:
+            <select name="resize_method">
+                {% for method in resize_methods %}
+                    <option value="{{ method }}" {% if method == 'lanczos' %}selected{% endif %}>{{ method|capitalize }}</option>
+                {% endfor %}
+            </select><br>
+            
+            <input type="submit" value="Process Images">
+        </form>
+    </div>
+
+    {% if processed_files %}
+    <div class="image-container">
+        {% for file in processed_files %}
+        <div class="image-pair">
+            <h3>Original ({{ file.original_size }}, {{ file.original_file_size }})</h3>
+            <img src="{{ url_for('uploaded_file', filename=file.original) }}" alt="Original">
+            <h3>Processed ({{ file.new_size }}, {{ file.new_file_size }})</h3>
+            <img src="{{ url_for('processed_file', filename=file.processed) }}" alt="Processed">
+            <div>
+                <a href="{{ url_for('processed_file', filename=file.processed) }}" 
+                   download="{{ file.processed }}" 
+                   class="download-btn">Download Processed Image</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</body>
+</html>
