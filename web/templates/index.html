@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Resizer Pro - Go Edition</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dark-theme">
+    <div class="glass-container">
+        <header>
+            <h1>Image Resizer <span class="badge">Pro</span></h1>
+            <p>High-performance image processing powered by Go</p>
+        </header>
+
+        <main>
+            <section class="upload-section" id="drop-zone">
+                <div class="upload-content">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                    </svg>
+                    <p>Drag & Drop images or <span class="browse">Browse</span></p>
+                    <input type="file" id="file-input" multiple accept="image/*" hidden>
+                </div>
+            </section>
+
+            <section class="controls-section">
+                <div class="control-group">
+                    <h3>Resize Mode</h3>
+                    <div class="toggle-group">
+                        <input type="radio" id="mode-percentage" name="operation" value="percentage" checked>
+                        <label for="mode-percentage">Percentage</label>
+                        <input type="radio" id="mode-dimensions" name="operation" value="dimensions">
+                        <label for="mode-dimensions">Dimensions</label>
+                    </div>
+                </div>
+
+                <div class="control-group" id="percentage-input">
+                    <label for="percentage">Scale (%)</label>
+                    <input type="number" id="percentage" name="percentage" value="50" min="1" max="500">
+                </div>
+
+                <div class="control-group hidden" id="dimensions-input">
+                    <div class="dimension-fields">
+                        <div>
+                            <label for="width">Width (px)</label>
+                            <input type="number" id="width" name="width" placeholder="Auto">
+                        </div>
+                        <div>
+                            <label for="height">Height (px)</label>
+                            <input type="number" id="height" name="height" placeholder="Auto">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="format">Output Format</label>
+                    <select id="format" name="format">
+                        <option value="jpeg">JPEG</option>
+                        <option value="png">PNG</option>
+                        <option value="webp">WebP</option>
+                        <option value="gif">GIF</option>
+                        <option value="ico">ICO</option>
+                        <option value="pdf">PDF (Document)</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <h3>Transform</h3>
+                    <div class="transform-controls">
+                        <select id="rotation" name="rotation">
+                            <option value="0">No Rotation</option>
+                            <option value="90">Rotate 90° CW</option>
+                            <option value="180">Rotate 180°</option>
+                            <option value="270">Rotate 90° CCW</option>
+                        </select>
+                        <select id="flip" name="flip">
+                            <option value="">No Flip</option>
+                            <option value="h">Flip Horizontal</option>
+                            <option value="v">Flip Vertical</option>
+                            <option value="both">Flip Both</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="control-group filters-group">
+                    <h3>Filters</h3>
+                    <div class="filter-checkboxes">
+                        <label><input type="checkbox" name="filters" value="grayscale"> Grayscale</label>
+                        <label><input type="checkbox" name="filters" value="sepia"> Sepia</label>
+                        <label><input type="checkbox" name="filters" value="invert"> Invert</label>
+                        <label><input type="checkbox" name="filters" value="blur"> Blur</label>
+                        <label><input type="checkbox" name="filters" value="sharpen"> Sharpen</label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Watermark & Text</h3>
+                    <div class="advanced-inputs">
+                        <input type="text" id="text-overlay" name="text_overlay" placeholder="Text Overlay">
+                        <div class="file-select-mini">
+                            <label for="watermark-file">Watermark Image:</label>
+                            <input type="file" id="watermark-file" accept="image/*">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Metadata & Privacy</h3>
+                    <div class="metadata-controls">
+                        <label><input type="checkbox" id="strip-exif" name="strip_exif" checked> Strip EXIF (Privacy)</label>
+                        <input type="text" id="copyright" name="copyright" placeholder="Copyright/Author">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label for="resize-method">Method</label>
+                    <select id="resize-method" name="resize_method">
+                        <option value="lanczos">Lanczos (Highest Quality)</option>
+                        <option value="bicubic">Bicubic (Sharp)</option>
+                        <option value="bilinear">Bilinear (Fast)</option>
+                        <option value="nearest">Nearest (Pixelated)</option>
+                    </select>
+                </div>
+
+                <button id="process-btn" class="primary-btn">
+                    <span>Process Images</span>
+                    <div class="loader hidden"></div>
+                </button>
+            </section>
+
+            <section class="results-section hidden" id="results-container">
+                <div class="results-header">
+                    <h3>Processed Files</h3>
+                    <button id="download-all-btn" class="secondary-btn">Download All (ZIP)</button>
+                </div>
+                <div id="results-list" class="results-grid"></div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2026 Image Resizer Pro. Built with Go & Vanilla JS.</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
