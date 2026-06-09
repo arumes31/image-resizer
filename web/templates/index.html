@@ -81,6 +81,18 @@
                 </div>
 
                 <div class="control-group">
+                    <h3>Composition</h3>
+                    <div class="composition-controls">
+                        <select id="crop" name="crop">
+                            <option value="none">No Cropping</option>
+                            <option value="1:1">Square (1:1)</option>
+                            <option value="16:9">Wide (16:9)</option>
+                            <option value="4:3">Photo (4:3)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="control-group">
                     <h3>Transform</h3>
                     <div class="transform-controls">
                         <select id="rotation" name="rotation">
@@ -107,6 +119,15 @@
                         <label><input type="checkbox" name="filters" value="blur"> Blur</label>
                         <label><input type="checkbox" name="filters" value="sharpen"> Sharpen</label>
                         <label><input type="checkbox" name="filters" value="pixelate"> Pixelate</label>
+                        <label><input type="checkbox" name="filters" value="noir"> Noir</label>
+                        <label><input type="checkbox" name="filters" value="vivid"> Vivid</label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <h3>Batch Renaming</h3>
+                    <div class="renaming-controls">
+                        <input type="text" id="rename-template" name="rename_template" placeholder="Template: {name}_pro" title="Use {name} for original filename">
                     </div>
                 </div>
 

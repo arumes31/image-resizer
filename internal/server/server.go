@@ -148,6 +148,8 @@ func (s *Server) handleUpload(c *gin.Context) {
 		Contrast:      contrast,
 		Saturation:    saturation,
 		Pixelate:      pixelate,
+		Crop:          c.PostForm("crop"),
+		RenameTemplate: c.PostForm("rename_template"),
 	}
 
 	var results []processor.ProcessResult

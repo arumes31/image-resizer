@@ -49,7 +49,7 @@ type ProcessOptions struct {
 	Format       string
 	Rotation     int    // 0, 90, 180, 270
 	Flip         string // "h", "v", "both", ""
-	Filters      []string // "grayscale", "sepia", "invert", "blur", "sharpen", "pixelate"
+	Filters      []string // "grayscale", "sepia", "invert", "blur", "sharpen", "pixelate", "noir", "vivid"
 	WatermarkPath string
 	WatermarkPos  string // "center", "top-left", etc.
 	TextOverlay   string
@@ -61,6 +61,9 @@ type ProcessOptions struct {
 	Contrast      float64 // -100 to 100
 	Saturation    float64 // -100 to 100
 	Pixelate      int     // 0 (off) to 100
+	Crop          string  // "1:1", "16:9", "4:3", "none"
+	Vignette      bool
+	RenameTemplate string
 }
 
 func CreatePDF(imagePaths []string, destPath string) error {
@@ -79,12 +82,46 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 		return nil, fmt.Errorf("failed to open image: %w", err)
 	}
 
-	// 1. Transformations: Rotation
+	// 1. Composition: Smart Crop
+	if opts.Crop != "" && opts.Crop != "none" {
+		bounds := img.Bounds()
+		w, h := bounds.Dx(), bounds.Dy()
+		var targetW, targetH int
+		switch opts.Crop {
+		case "1:1":
+			size := w
+			if h < w {
+				size = h
+			}
+			targetW, targetH = size, size
+		case "16:9":
+			if float64(w)/float64(h) > 16.0/9.0 {
+				targetH = h
+				targetW = int(float64(h) * 16.0 / 9.0)
+			} else {
+				targetW = w
+				targetH = int(float64(w) * 9.0 / 16.0)
+			}
+		case "4:3":
+			if float64(w)/float64(h) > 4.0/3.0 {
+				targetH = h
+				targetW = int(float64(h) * 4.0 / 3.0)
+			} else {
+				targetW = w
+				targetH = int(float64(w) * 3.0 / 4.0)
+			}
+		}
+		if targetW > 0 && targetH > 0 {
+			img = imaging.Fill(img, targetW, targetH, imaging.Center, imaging.Lanczos)
+		}
+	}
+
+	// 2. Transformations: Rotation
 	if opts.Rotation != 0 {
 		img = imaging.Rotate(img, float64(opts.Rotation), image.Transparent)
 	}
 
-	// 2. Transformations: Flipping
+	// 3. Transformations: Flipping
 	if opts.Flip == "h" {
 		img = imaging.FlipH(img)
 	} else if opts.Flip == "v" {
@@ -94,7 +131,7 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 		img = imaging.FlipV(img)
 	}
 
-	// 3. Filters
+	// 4. Filters
 	for _, filter := range opts.Filters {
 		switch strings.ToLower(filter) {
 		case "grayscale":
@@ -107,20 +144,28 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 			img = imaging.Blur(img, 2.0)
 		case "sharpen":
 			img = imaging.Sharpen(img, 1.0)
+		case "noir":
+			img = imaging.Grayscale(img)
+			img = imaging.AdjustContrast(img, 20)
+			img = imaging.AdjustBrightness(img, -10)
+		case "vivid":
+			img = imaging.AdjustSaturation(img, 30)
+			img = imaging.AdjustContrast(img, 10)
 		case "pixelate":
 			if opts.Pixelate > 0 {
-				// Pixelate is done by shrinking and growing
 				bounds := img.Bounds()
 				w, h := bounds.Dx(), bounds.Dy()
 				pxSize := opts.Pixelate
-				if pxSize < 1 { pxSize = 1 }
+				if pxSize < 1 {
+					pxSize = 1
+				}
 				img = imaging.Resize(img, w/pxSize, h/pxSize, imaging.NearestNeighbor)
 				img = imaging.Resize(img, w, h, imaging.NearestNeighbor)
 			}
 		}
 	}
 
-	// 4. Dynamic Adjustments
+	// 5. Dynamic Adjustments
 	if opts.Brightness != 0 {
 		img = imaging.AdjustBrightness(img, opts.Brightness)
 	}
@@ -186,12 +231,21 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 	}
 
 	fileName := filepath.Base(srcPath)
+	origNameNoExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+
 	ext := strings.ToLower(opts.Format)
 	if ext == "" || ext == "pdf" {
 		ext = "jpg" // PDF intermediate is JPG
 	}
 	
-	processedFileName := fmt.Sprintf("processed_%s.%s", strings.TrimSuffix(fileName, filepath.Ext(fileName)), ext)
+	processedFileName := ""
+	if opts.RenameTemplate != "" {
+		processedFileName = strings.ReplaceAll(opts.RenameTemplate, "{name}", origNameNoExt)
+		processedFileName = fmt.Sprintf("%s.%s", processedFileName, ext)
+	} else {
+		processedFileName = fmt.Sprintf("processed_%s.%s", origNameNoExt, ext)
+	}
+	
 	destPath := filepath.Join(destDir, processedFileName)
 
 	err = imaging.Save(resizedImg, destPath)

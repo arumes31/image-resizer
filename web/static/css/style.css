@@ -201,6 +201,21 @@ input[type="number"], select {
     gap: 12px;
 }
 
+.renaming-controls input {
+    width: 100%;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text-main);
+    outline: none;
+    font-size: 0.875rem;
+}
+
+.renaming-controls input:focus {
+    border-color: var(--primary);
+}
+
 .advanced-inputs {
     display: flex;
     flex-direction: column;

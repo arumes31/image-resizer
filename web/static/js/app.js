@@ -109,6 +109,8 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('text_overlay', document.getElementById('text-overlay').value);
         formData.append('strip_exif', document.getElementById('strip-exif').checked ? 'on' : 'off');
         formData.append('copyright', document.getElementById('copyright').value);
+        formData.append('rename_template', document.getElementById('rename-template').value);
+        formData.append('crop', document.getElementById('crop').value);
         formData.append('brightness', document.getElementById('brightness').value);
         formData.append('contrast', document.getElementById('contrast').value);
         formData.append('saturation', document.getElementById('saturation').value);
