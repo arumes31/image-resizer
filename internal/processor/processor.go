@@ -160,4 +160,25 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 		}
 	}
 
-	fileName := filepath.Bas
+	fileName := filepath.Base(srcPath)
+	ext := strings.ToLower(opts.Format)
+	if ext == "" || ext == "pdf" {
+		ext = "jpg" // PDF intermediate is JPG
+	}
+	
+	processedFileName := fmt.Sprintf("processed_%s.%s", strings.TrimSuffix(fileName, filepath.Ext(fileName)), ext)
+	destPath := filepath.Join(destDir, processedFileName)
+
+	err = imaging.Save(resizedImg, destPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save image: %w", err)
+	}
+
+	return &ProcessResult{
+		OriginalName: fileName,
+		ProcessedName: processedFileName,
+		OriginalSize: fmt.Sprintf("%dx%d", origWidth, origHeight),
+		NewSize:      fmt.Sprintf("%dx%d", newWidth, newHeight),
+		NewFilePath:  destPath,
+	}, nil
+}
