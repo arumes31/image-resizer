@@ -1,0 +1,6 @@
+
+temp/
+image-resizer.exe
+*.zip
+static/processed/*
+static/uploads/*

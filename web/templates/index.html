@@ -32,7 +32,22 @@
                         <label for="mode-percentage">Percentage</label>
                         <input type="radio" id="mode-dimensions" name="operation" value="dimensions">
                         <label for="mode-dimensions">Dimensions</label>
+                        <input type="radio" id="mode-social" name="operation" value="social">
+                        <label for="mode-social">Social Presets</label>
                     </div>
+                </div>
+
+                <div class="control-group hidden" id="social-input">
+                    <label for="social-preset">Preset</label>
+                    <select id="social-preset">
+                        <option value="1080x1080">Instagram Post (1:1)</option>
+                        <option value="1080x1350">Instagram Portrait (4:5)</option>
+                        <option value="1080x1920">Instagram Story / Reel</option>
+                        <option value="1200x628">Facebook Post</option>
+                        <option value="1200x675">Twitter Post</option>
+                        <option value="1920x1080">YouTube Thumbnail</option>
+                        <option value="1200x627">LinkedIn Post</option>
+                    </select>
                 </div>
 
                 <div class="control-group" id="percentage-input">
@@ -91,6 +106,33 @@
                         <label><input type="checkbox" name="filters" value="invert"> Invert</label>
                         <label><input type="checkbox" name="filters" value="blur"> Blur</label>
                         <label><input type="checkbox" name="filters" value="sharpen"> Sharpen</label>
+                        <label><input type="checkbox" name="filters" value="pixelate"> Pixelate</label>
+                    </div>
+                </div>
+
+                <div class="control-group adjustments-group">
+                    <h3>Adjustments</h3>
+                    <div class="adjustment-sliders">
+                        <div class="slider-row">
+                            <label for="brightness">Brightness</label>
+                            <input type="range" id="brightness" name="brightness" min="-100" max="100" value="0">
+                            <span class="value">0</span>
+                        </div>
+                        <div class="slider-row">
+                            <label for="contrast">Contrast</label>
+                            <input type="range" id="contrast" name="contrast" min="-100" max="100" value="0">
+                            <span class="value">0</span>
+                        </div>
+                        <div class="slider-row">
+                            <label for="saturation">Saturation</label>
+                            <input type="range" id="saturation" name="saturation" min="-100" max="100" value="0">
+                            <span class="value">0</span>
+                        </div>
+                        <div class="slider-row" id="pixelate-input" style="display:none;">
+                            <label for="pixelate">Pixel Size</label>
+                            <input type="range" id="pixelate" name="pixelate" min="1" max="100" value="10">
+                            <span class="value">10</span>
+                        </div>
                     </div>
                 </div>
 
@@ -135,6 +177,14 @@
                     <button id="download-all-btn" class="secondary-btn">Download All (ZIP)</button>
                 </div>
                 <div id="results-list" class="results-grid"></div>
+            </section>
+            <section class="developer-section">
+                <h3>Developer API</h3>
+                <div class="api-info">
+                    <p>Endpoint: <code>/api/v1/process</code></p>
+                    <p>Method: <code>POST</code> (Multipart Form)</p>
+                    <p>API Key: <code id="api-key-display">pro_resizer_key_2026</code></p>
+                </div>
             </section>
         </main>
 

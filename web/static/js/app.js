@@ -4,24 +4,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const processBtn = document.getElementById('process-btn');
     const modePercentage = document.getElementById('mode-percentage');
     const modeDimensions = document.getElementById('mode-dimensions');
+    const modeSocial = document.getElementById('mode-social');
     const percentageInput = document.getElementById('percentage-input');
     const dimensionsInput = document.getElementById('dimensions-input');
+    const socialInput = document.getElementById('social-input');
+    const socialPreset = document.getElementById('social-preset');
     const resultsContainer = document.getElementById('results-container');
     const resultsList = document.getElementById('results-list');
     const downloadAllBtn = document.getElementById('download-all-btn');
+    const pixelateToggle = document.querySelector('input[name="filters"][value="pixelate"]');
+    const pixelateInputRow = document.getElementById('pixelate-input');
 
     let selectedFiles = [];
     let processedFileNames = [];
+
+    // Slider value updates
+    document.querySelectorAll('input[type="range"]').forEach(slider => {
+        slider.addEventListener('input', (e) => {
+            e.target.nextElementSibling.textContent = e.target.value;
+        });
+    });
+
+    // Toggle pixelate input
+    pixelateToggle.addEventListener('change', () => {
+        pixelateInputRow.style.display = pixelateToggle.checked ? 'flex' : 'none';
+    });
 
     // Toggle inputs
     modePercentage.addEventListener('change', () => {
         percentageInput.classList.remove('hidden');
         dimensionsInput.classList.add('hidden');
+        socialInput.classList.add('hidden');
     });
 
     modeDimensions.addEventListener('change', () => {
         percentageInput.classList.add('hidden');
         dimensionsInput.classList.remove('hidden');
+        socialInput.classList.add('hidden');
+    });
+
+    modeSocial.addEventListener('change', () => {
+        percentageInput.classList.add('hidden');
+        dimensionsInput.classList.add('hidden');
+        socialInput.classList.remove('hidden');
     });
 
     // File selection
@@ -63,16 +88,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const formData = new FormData();
         selectedFiles.forEach(file => formData.append('files[]', file));
         
-        const operation = document.querySelector('input[name="operation"]:checked').value;
+        let operation = document.querySelector('input[name="operation"]:checked').value;
+        
+        if (operation === 'social') {
+            const [w, h] = socialPreset.value.split('x');
+            formData.append('width', w);
+            formData.append('height', h);
+            operation = 'dimensions';
+        } else {
+            formData.append('percentage', document.getElementById('percentage').value);
+            formData.append('width', document.getElementById('width').value);
+            formData.append('height', document.getElementById('height').value);
+        }
+        
         formData.append('operation', operation);
-        formData.append('percentage', document.getElementById('percentage').value);
-        formData.append('width', document.getElementById('width').value);
-        formData.append('height', document.getElementById('height').value);
         formData.append('format', document.getElementById('format').value);
         formData.append('resize_method', document.getElementById('resize-method').value);
         formData.append('rotation', document.getElementById('rotation').value);
         formData.append('flip', document.getElementById('flip').value);
         formData.append('text_overlay', document.getElementById('text-overlay').value);
+        formData.append('strip_exif', document.getElementById('strip-exif').checked ? 'on' : 'off');
+        formData.append('copyright', document.getElementById('copyright').value);
+        formData.append('brightness', document.getElementById('brightness').value);
+        formData.append('contrast', document.getElementById('contrast').value);
+        formData.append('saturation', document.getElementById('saturation').value);
+        formData.append('pixelate', document.getElementById('pixelate').value);
         
         const watermarkFile = document.getElementById('watermark-file').files[0];
         if (watermarkFile) {

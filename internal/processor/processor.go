@@ -49,7 +49,7 @@ type ProcessOptions struct {
 	Format       string
 	Rotation     int    // 0, 90, 180, 270
 	Flip         string // "h", "v", "both", ""
-	Filters      []string // "grayscale", "sepia", "invert", "blur", "sharpen"
+	Filters      []string // "grayscale", "sepia", "invert", "blur", "sharpen", "pixelate"
 	WatermarkPath string
 	WatermarkPos  string // "center", "top-left", etc.
 	TextOverlay   string
@@ -57,6 +57,10 @@ type ProcessOptions struct {
 	TextSize      float64
 	StripEXIF     bool
 	Copyright     string
+	Brightness    float64 // -100 to 100
+	Contrast      float64 // -100 to 100
+	Saturation    float64 // -100 to 100
+	Pixelate      int     // 0 (off) to 100
 }
 
 func CreatePDF(imagePaths []string, destPath string) error {
@@ -103,7 +107,28 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 			img = imaging.Blur(img, 2.0)
 		case "sharpen":
 			img = imaging.Sharpen(img, 1.0)
+		case "pixelate":
+			if opts.Pixelate > 0 {
+				// Pixelate is done by shrinking and growing
+				bounds := img.Bounds()
+				w, h := bounds.Dx(), bounds.Dy()
+				pxSize := opts.Pixelate
+				if pxSize < 1 { pxSize = 1 }
+				img = imaging.Resize(img, w/pxSize, h/pxSize, imaging.NearestNeighbor)
+				img = imaging.Resize(img, w, h, imaging.NearestNeighbor)
+			}
 		}
+	}
+
+	// 4. Dynamic Adjustments
+	if opts.Brightness != 0 {
+		img = imaging.AdjustBrightness(img, opts.Brightness)
+	}
+	if opts.Contrast != 0 {
+		img = imaging.AdjustContrast(img, opts.Contrast)
+	}
+	if opts.Saturation != 0 {
+		img = imaging.AdjustSaturation(img, opts.Saturation)
 	}
 
 	origBounds := img.Bounds()

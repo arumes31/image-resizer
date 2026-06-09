@@ -9,6 +9,7 @@ type Config struct {
 	ProcessedFolder string
 	MaxContentLength int64
 	Port            string
+	APIKey          string
 }
 
 func LoadConfig() *Config {
@@ -17,6 +18,7 @@ func LoadConfig() *Config {
 		ProcessedFolder: getEnv("PROCESSED_FOLDER", "static/processed"),
 		MaxContentLength: 16 * 1024 * 1024, // 16MB
 		Port:            getEnv("PORT", "5000"),
+		APIKey:          getEnv("API_KEY", "pro_resizer_key_2026"), // Default dev key
 	}
 }
 

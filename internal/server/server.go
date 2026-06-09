@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"image-resizer/internal/config"
+	"image-resizer/internal/middleware"
 	"image-resizer/internal/processor"
 	"io"
 	"net/http"
@@ -41,6 +42,16 @@ func (s *Server) setupRoutes() {
 	s.router.GET("/download-all", s.handleDownloadAll)
 	s.router.Static("/static", "./web/static")
 	s.router.Static("/processed", s.cfg.ProcessedFolder)
+
+	// Developer API
+	api := s.router.Group("/api/v1")
+	api.Use(middleware.APIKeyAuth(s.cfg.APIKey))
+	{
+		api.POST("/process", s.handleUpload)
+		api.GET("/status", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"status": "operational", "version": "v2.0.0-go"})
+		})
+	}
 }
 
 func (s *Server) handleIndex(c *gin.Context) {
@@ -58,39 +69,41 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 	zipName := fmt.Sprintf("processed_images_%d.zip", time.Now().Unix())
 	zipPath := filepath.Join(s.cfg.ProcessedFolder, zipName)
 
-	zipFile, err := os.Create(zipPath)
+	zipFile, err := os.Create(filepath.Clean(zipPath))
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to create zip")
 		return
 	}
-	defer zipFile.Close()
+	defer func() { _ = zipFile.Close() }()
 
 	archive := zip.NewWriter(zipFile)
-	defer archive.Close()
+	defer func() { _ = archive.Close() }()
 
 	for _, name := range fileList {
-		filePath := filepath.Join(s.cfg.ProcessedFolder, name)
-		file, err := os.Open(filePath)
+		safeName := filepath.Base(name)
+		filePath := filepath.Join(s.cfg.ProcessedFolder, safeName)
+		file, err := os.Open(filepath.Clean(filePath))
 		if err != nil {
 			continue
 		}
-		defer file.Close()
 
-		w, err := archive.Create(name)
+		w, err := archive.Create(safeName)
 		if err != nil {
+			_ = file.Close()
 			continue
 		}
 
 		if _, err := io.Copy(w, file); err != nil {
+			_ = file.Close()
 			continue
 		}
+		_ = file.Close()
 	}
 
-	archive.Close()
-	zipFile.Close()
+	_ = archive.Close()
+	_ = zipFile.Close()
 
 	c.File(zipPath)
-	// Optionally delete the zip after sending, but cleanup worker will handle it
 }
 
 func (s *Server) handleUpload(c *gin.Context) {
@@ -102,13 +115,18 @@ func (s *Server) handleUpload(c *gin.Context) {
 	height, _ := strconv.Atoi(c.PostForm("height"))
 	quality, _ := strconv.Atoi(c.PostForm("quality"))
 	rotation, _ := strconv.Atoi(c.PostForm("rotation"))
+	brightness, _ := strconv.ParseFloat(c.PostForm("brightness"), 64)
+	contrast, _ := strconv.ParseFloat(c.PostForm("contrast"), 64)
+	saturation, _ := strconv.ParseFloat(c.PostForm("saturation"), 64)
+	pixelate, _ := strconv.Atoi(c.PostForm("pixelate"))
 	
 	watermarkFile, err := c.FormFile("watermark")
 	watermarkPath := ""
 	if err == nil {
-		watermarkPath = filepath.Join(s.cfg.UploadFolder, "temp_watermark_" + watermarkFile.Filename)
-		c.SaveUploadedFile(watermarkFile, watermarkPath)
-		defer os.Remove(watermarkPath)
+		watermarkPath = filepath.Join(s.cfg.UploadFolder, "temp_watermark_" + filepath.Base(watermarkFile.Filename))
+		if err := c.SaveUploadedFile(watermarkFile, watermarkPath); err == nil {
+			defer func() { _ = os.Remove(watermarkPath) }()
+		}
 	}
 
 	opts := processor.ProcessOptions{
@@ -126,6 +144,10 @@ func (s *Server) handleUpload(c *gin.Context) {
 		TextOverlay:   c.PostForm("text_overlay"),
 		StripEXIF:     c.PostForm("strip_exif") == "on",
 		Copyright:     c.PostForm("copyright"),
+		Brightness:    brightness,
+		Contrast:      contrast,
+		Saturation:    saturation,
+		Pixelate:      pixelate,
 	}
 
 	var results []processor.ProcessResult
@@ -142,15 +164,15 @@ func (s *Server) handleUpload(c *gin.Context) {
 		res, err := processor.ProcessImage(uploadPath, s.cfg.ProcessedFolder, opts)
 		if err != nil {
 			fmt.Printf("Error processing %s: %v\n", filename, err)
+			_ = os.Remove(uploadPath)
 			continue
 		}
 
-		os.Remove(uploadPath)
+		_ = os.Remove(uploadPath)
 		results = append(results, *res)
 		processedPaths = append(processedPaths, res.NewFilePath)
 	}
 
-	// If format is PDF, create a single PDF and return it as the first result
 	if opts.Format == "pdf" && len(processedPaths) > 0 {
 		pdfPath := filepath.Join(s.cfg.ProcessedFolder, fmt.Sprintf("document_%d.pdf", time.Now().Unix()))
 		if err := processor.CreatePDF(processedPaths, pdfPath); err == nil {
@@ -190,7 +212,7 @@ func (s *Server) cleanupFiles(dir string, maxAge time.Duration) {
 			continue
 		}
 		if now.Sub(info.ModTime()) > maxAge {
-			os.Remove(filepath.Join(dir, f.Name()))
+			_ = os.Remove(filepath.Join(dir, f.Name()))
 		}
 	}
 }

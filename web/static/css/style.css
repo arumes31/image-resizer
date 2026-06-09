@@ -207,6 +207,65 @@ input[type="number"], select {
     gap: 8px;
 }
 
+.metadata-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--glass-bg);
+    padding: 12px;
+    border-radius: 8px;
+}
+
+.metadata-controls label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.875rem;
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+.metadata-controls input[type="checkbox"] {
+    accent-color: var(--primary);
+}
+
+.adjustment-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: var(--glass-bg);
+    padding: 16px;
+    border-radius: 12px;
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.slider-row label {
+    width: 80px;
+    font-size: 0.75rem;
+}
+
+.slider-row input[type="range"] {
+    flex: 1;
+    accent-color: var(--primary);
+}
+
+.slider-row .value {
+    width: 30px;
+    font-size: 0.75rem;
+    text-align: right;
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.adjustments-group {
+    grid-column: 1 / -1;
+}
+
 .file-select-mini {
     display: flex;
     align-items: center;
@@ -279,9 +338,30 @@ input[type="number"], select {
     font-size: 0.875rem;
 }
 
-footer {
-    text-align: center;
+.developer-section {
     margin-top: 40px;
-    font-size: 0.8rem;
+    padding: 24px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 16px;
+    border: 1px solid var(--glass-border);
+}
+
+.developer-section h3 {
+    font-size: 1.1rem;
+    margin-bottom: 12px;
+    color: var(--primary);
+}
+
+.api-info code {
+    background: #1e293b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #38bdf8;
+}
+
+.api-info p {
+    font-size: 0.85rem;
+    margin-bottom: 8px;
     color: var(--text-muted);
 }

@@ -11,10 +11,10 @@ func main() {
 	cfg := config.LoadConfig()
 
 	// Ensure directories exist
-	if err := os.MkdirAll(cfg.UploadFolder, 0755); err != nil {
+	if err := os.MkdirAll(cfg.UploadFolder, 0750); err != nil {
 		log.Fatalf("Failed to create upload folder: %v", err)
 	}
-	if err := os.MkdirAll(cfg.ProcessedFolder, 0755); err != nil {
+	if err := os.MkdirAll(cfg.ProcessedFolder, 0750); err != nil {
 		log.Fatalf("Failed to create processed folder: %v", err)
 	}
 
