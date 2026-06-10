@@ -6,7 +6,7 @@
 ![Go Version](https://img.shields.io/badge/Go-1.26.4-00ADD8?style=for-the-badge&logo=go)
 ![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)
 
-**High-performance, secure, and modern image processing suite built with Go and Gin-Gonic.**
+**High-performance, secure image processing suite built with Go & Gin. Features smart cropping, artistic filters, batch transformations, PDF export, and a modern Glassmorphism UI. Secure by design with API-key authentication and metadata (EXIF) stripping.**
 
 ---
 
