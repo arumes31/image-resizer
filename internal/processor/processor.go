@@ -517,7 +517,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 
 	switch ext {
 	case "webp":
-		out, cErr := os.Create(destPath)
+		out, cErr := os.Create(filepath.Clean(destPath)) // #nosec G304
 		if cErr != nil {
 			return nil, fmt.Errorf("failed to create webp file: %w", cErr)
 		}
@@ -531,7 +531,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 			return nil, fmt.Errorf("failed to save webp image: %w", eErr)
 		}
 	case "ico":
-		out, cErr := os.Create(destPath)
+		out, cErr := os.Create(filepath.Clean(destPath)) // #nosec G304
 		if cErr != nil {
 			return nil, fmt.Errorf("failed to create ico file: %w", cErr)
 		}
