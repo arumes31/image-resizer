@@ -214,6 +214,9 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		return nil, fmt.Errorf("failed to open image: %w", err)
 	}
 
+	origWidthBeforeTransforms := img.Bounds().Dx()
+	origHeightBeforeTransforms := img.Bounds().Dy()
+
 	// BUG-12 FIX: StripEXIF is now functional.
 	// imaging.Open with AutoOrientation already handles EXIF orientation,
 	// and re-encoding the image through the pipeline naturally strips EXIF
@@ -518,7 +521,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 	return &ProcessResult{
 		OriginalName:  fileName,
 		ProcessedName: processedFileName,
-		OriginalSize:  fmt.Sprintf("%dx%d", origWidth, origHeight),
+		OriginalSize:  fmt.Sprintf("%dx%d", origWidthBeforeTransforms, origHeightBeforeTransforms),
 		NewSize:       fmt.Sprintf("%dx%d", newWidth, newHeight),
 		NewFilePath:   destPath,
 	}, nil

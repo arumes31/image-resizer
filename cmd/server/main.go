@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"image-resizer/internal/config"
 	"image-resizer/internal/server"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,7 +31,7 @@ func main() {
 	// in-progress requests to complete within a 5-second timeout.
 	go func() {
 		log.Printf("Server starting on port %s...", cfg.Port)
-		if err := s.Start(); err != nil && err.Error() != "http: Server closed" {
+		if err := s.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("Server failed: %v", err)
 		}
 	}()
@@ -40,12 +42,13 @@ func main() {
 	log.Println("Shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	if err := s.Shutdown(ctx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
 		cancel()
+		//nolint:gocritic // exit skips defer, so cancel is called above
 		os.Exit(1)
 	}
-	cancel()
 	log.Println("Server exited gracefully")
 }

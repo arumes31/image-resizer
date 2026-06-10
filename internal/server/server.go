@@ -34,8 +34,11 @@ func NewServer(cfg *config.Config) *Server {
 		router: r,
 		cfg:    cfg,
 		http: &http.Server{
-			Addr:    ":" + cfg.Port,
-			Handler: r,
+			Addr:         ":" + cfg.Port,
+			Handler:      r,
+			ReadTimeout:  15 * time.Second,
+			WriteTimeout: 15 * time.Second,
+			IdleTimeout:  60 * time.Second,
 		},
 	}
 
@@ -138,13 +141,6 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", zipName))
 	c.File(zipPath)
 
-	// BUG-05 FIX: Schedule deletion of the temporary zip file after a short
-	// delay to ensure the response has been fully sent. Previously, zip files
-	// accumulated on disk until the 12-hour cleanup worker ran.
-	go func() {
-		time.Sleep(5 * time.Second)
-		_ = os.Remove(zipPath)
-	}()
 }
 
 func (s *Server) handleUpload(c *gin.Context) {
@@ -234,6 +230,8 @@ func (s *Server) handleUpload(c *gin.Context) {
 		watermarkPath = filepath.Join(s.cfg.UploadFolder, fmt.Sprintf("temp_watermark_%d_%s", time.Now().UnixMilli(), safeWMName))
 		if err := c.SaveUploadedFile(watermarkFile, watermarkPath); err == nil {
 			defer func() { _ = os.Remove(watermarkPath) }()
+		} else {
+			watermarkPath = ""
 		}
 	}
 

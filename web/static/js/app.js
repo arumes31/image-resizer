@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const pSize = res.newSize || res.NewSize;
 
             const img = document.createElement('img');
-            img.src = `/processed/${encodeURI(pName)}`;
+            img.src = `/processed/${encodeURIComponent(pName)}`;
             img.alt = pName; // Safe as property assignment
 
             const p = document.createElement('p');
@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
             p.textContent = pSize;
 
             const a = document.createElement('a');
-            a.href = `/download/${encodeURI(pName)}`;
+            a.href = `/download/${encodeURIComponent(pName)}`;
             a.download = pName;
             a.className = 'download-link';
             a.textContent = 'Download';

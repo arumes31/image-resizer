@@ -3,7 +3,7 @@
 ![Build Status](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/build.yml?branch=v0.5&style=for-the-badge&logo=github&label=Build)
 ![Security Audit](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/security.yml?branch=v0.5&style=for-the-badge&logo=pre-commit&label=Security)
 ![Linting](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/lint.yml?branch=v0.5&style=for-the-badge&logo=go&label=Lint)
-![Go Version](https://img.shields.io/badge/Go-1.26.4+-00ADD8?style=for-the-badge&logo=go)
+![Go Version](https://img.shields.io/badge/Go-1.26.4-00ADD8?style=for-the-badge&logo=go)
 ![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)
 
 **High-performance, secure, and modern image processing suite built with Go and Gin-Gonic.**
@@ -14,8 +14,8 @@
 
 | 🎭 **Artistic** | 📐 **Transform** | 🛠️ **Utility** |
 | :--- | :--- | :--- |
-| **Filters:** Noir, Vivid, Sepia, Invert | **Smart Crop:** 1:1, 16:9, 4:3 | **Batch Rename:** Custom templates |
-| **Adjustments:** Brightness, Contrast | **Resize:** % or Pixel accurate | **Zip Bundling:** Batch downloads |
+| **Filters:** Noir, Vivid, Sepia, Invert, Grayscale | **Smart Crop:** 1:1, 16:9, 4:3 | **Batch Rename:** Custom templates |
+| **Adjustments:** Brightness, Contrast, Saturation | **Resize:** % or Pixel accurate | **Zip Bundling:** Batch downloads |
 | **Effects:** Pixelate, Blur, Sharpen | **Rotate:** 90°, 180°, 270° | **PDF Export:** Images to Document |
 | **Overlays:** Text (Custom Font), Image | **Flip:** Horizontal & Vertical | **EXIF Strip:** Privacy protection |
 
@@ -30,7 +30,7 @@ xychart-beta
     y-axis "Time (Seconds)" [0, 20]
     bar [18.4, 4.2]
 ```
-*Go is ~4.4x faster for concurrent image processing batches.*
+*Note: The figures shown above are illustrative/approximate.*
 
 ---
 
@@ -91,7 +91,7 @@ Required Header: `X-API-Key: your_secure_key`
 
 ## 🔒 Security & Privacy
 - **Privacy:** One-click EXIF stripping removes metadata (GPS, Timestamps).
-- **Safety:** Constant-time comparison for API keys; 500% scaling cap to prevent memory exhaustion.
+- **Safety:** Constant-time comparison for API keys; 500% scaling cap to prevent memory exhaustion (enforced in `handleUpload` in `internal/server/server.go`).
 - **Audited:** Scanned with `gosec` and `govulncheck` on every commit.
 
 ---
