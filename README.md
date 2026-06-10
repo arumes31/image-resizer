@@ -81,11 +81,83 @@ Open `http://localhost:5000` to access the dashboard.
 The suite includes a secure REST API for headless automation.
 
 **Authentication:**
-Required Header: `X-API-Key: your_secure_key`
+All API endpoints (except `/api/v1/status`) require an API key passed via the HTTP headers.
+- **Header:** `X-API-Key`
+- **Value:** Your configured secure key.
 
-**Endpoints:**
-- `POST /api/v1/process`: Upload and process images (supports all dashboard features).
-- `GET /api/v1/status`: Check system health and version.
+### Endpoints
+
+#### 1. System Status
+- **Method:** `GET`
+- **Path:** `/api/v1/status`
+- **Description:** Check system health and current API version.
+- **Response:**
+  ```json
+  {
+    "status": "operational",
+    "version": "v2.0.0-go"
+  }
+  ```
+
+#### 2. Process Images
+- **Method:** `POST`
+- **Path:** `/api/v1/process`
+- **Content-Type:** `multipart/form-data`
+- **Description:** Upload one or more images and apply various transformations, filters, and optimizations.
+
+**Form Parameters:**
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `files[]` | File | - | **(Required)** Images to process. Allowed: jpg, png, gif, bmp, tiff, webp, ico |
+| `operation` | String | `percentage` | The resize operation: `percentage` or `fill` |
+| `percentage` | Integer | `100` | Scale percentage (max: 500) |
+| `width` | Integer | `0` | Target width in pixels |
+| `height` | Integer | `0` | Target height in pixels |
+| `quality` | Integer | `85` | Output image quality (1-100) |
+| `rotation` | Integer | `0` | Degrees to rotate: `0`, `90`, `180`, `270` |
+| `brightness` | Float | `0` | Adjust brightness |
+| `contrast` | Float | `0` | Adjust contrast |
+| `saturation` | Float | `0` | Adjust saturation |
+| `pixelate` | Integer | `0` | Pixelation factor |
+| `watermark` | File | - | Image file to use as a watermark overlay |
+| `format` | String | Original | Output format (e.g., `jpg`, `png`, `webp`, `pdf`) |
+| `resize_method` | String | - | Resampling method |
+| `flip` | String | - | Flip direction: `horizontal`, `vertical` |
+| `filters[]` | String Array| - | Array of filters (e.g., Noir, Vivid, Sepia) |
+| `text_overlay` | String | - | Text to render over the image |
+| `text_color` | String | - | Hex color code for the text overlay |
+| `strip_exif` | String | - | Set to `on` to remove EXIF metadata |
+| `copyright` | String | - | Copyright text to embed in metadata |
+| `crop` | String | - | Crop aspect ratio |
+| `vignette` | String | - | Set to `on` to apply a vignette effect |
+| `rename_template`| String | - | Template for renaming output files |
+
+**Responses:**
+
+*Success (200 OK):*
+```json
+{
+  "results": [
+    {
+      "OriginalName": "photo.jpg",
+      "ProcessedName": "processed_photo.jpg",
+      "OriginalSize": "1.5 MB",
+      "NewSize": "450 KB",
+      "NewFilePath": "static/processed/processed_photo.jpg"
+    }
+  ]
+}
+```
+
+*Partial Failure (200 OK):*
+If some files fail but others succeed, the response includes both `results` and `errors` arrays.
+
+*Unprocessable Entity (422 Unprocessable Entity):*
+Returned if all uploaded files fail to process. Includes an `errors` array.
+
+*Bad Request (400 Bad Request):*
+Returned for invalid form data or unallowed file extensions.
 
 ---
 
