@@ -64,8 +64,8 @@ graph TD
 
 ### 📦 Run with Docker
 ```bash
-docker pull ghcr.io/arumes31/image-resizer:v0.5
-docker run -p 5000:5000 ghcr.io/arumes31/image-resizer:v0.5
+docker pull ghcr.io/arumes31/image-resizer:latest
+docker run -p 5000:5000 ghcr.io/arumes31/image-resizer:latest
 ```
 
 ### 🔨 Development Mode
