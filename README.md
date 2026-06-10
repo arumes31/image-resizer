@@ -26,7 +26,7 @@
 ```mermaid
 xychart-beta
     title "Processing Speed: Go vs Python (100MB Batch)"
-    x-axis [Python (Pillow), Go (Imaging)]
+    x-axis ["Python (Pillow)", "Go (Imaging)"]
     y-axis "Time (Seconds)" [0, 20]
     bar [18.4, 4.2]
 ```
