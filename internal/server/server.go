@@ -50,6 +50,9 @@ func NewServer(cfg *config.Config) *Server {
 
 func (s *Server) setupRoutes() {
 	s.router.GET("/", s.handleIndex)
+	s.router.GET("/favicon.ico", func(c *gin.Context) {
+		c.File("./web/static/assets/logo.svg")
+	})
 	s.router.POST("/", s.handleUpload)
 	s.router.GET("/download-all", s.handleDownloadAll)
 
