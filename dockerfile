@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o image-resizer ./cmd/server/main.go
+RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o image-resizer ./cmd/server/main.go
 
 # Final stage
 FROM alpine:latest
