@@ -120,6 +120,7 @@ func (s *Server) handleUpload(c *gin.Context) {
 	
 	percentage, _ := strconv.Atoi(c.DefaultPostForm("percentage", "100"))
 	if percentage <= 0 { percentage = 100 }
+	if percentage > 500 { percentage = 500 }
 	
 	width, _ := strconv.Atoi(c.DefaultPostForm("width", "0"))
 	height, _ := strconv.Atoi(c.DefaultPostForm("height", "0"))

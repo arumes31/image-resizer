@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/disintegration/imaging"
@@ -64,6 +65,27 @@ type ProcessOptions struct {
 	Crop          string  // "1:1", "16:9", "4:3", "none"
 	Vignette      bool
 	RenameTemplate string
+}
+
+func getPlatformFontPath() string {
+	switch runtime.GOOS {
+	case "windows":
+		return "C:\\Windows\\Fonts\\arial.ttf"
+	case "darwin":
+		return "/Library/Fonts/Arial.ttf"
+	default: // Linux and others
+		paths := []string{
+			"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+			"/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+			"/usr/share/fonts/TTF/DejaVuSans.ttf",
+		}
+		for _, p := range paths {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
 func CreatePDF(imagePaths []string, destPath string) error {
@@ -241,37 +263,41 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 
 		fontPath := os.Getenv("FONT_PATH")
 		if fontPath == "" {
-			fontPath = "C:\\Windows\\Fonts\\arial.ttf" // Fallback
+			fontPath = getPlatformFontPath()
 		}
 		
-		fontBytes, err := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
-		if err == nil {
-			f, err := freetype.ParseFont(fontBytes)
+		if fontPath != "" {
+			fontBytes, err := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
 			if err == nil {
-				// Parse color
-				var r, g, b uint8 = 255, 255, 255
-				if opts.TextColor != "" {
-					_, _ = fmt.Sscanf(opts.TextColor, "#%02x%02x%02x", &r, &g, &b)
-				}
-				fg := image.NewUniform(color.RGBA{r, g, b, 255})
-				
-				c := freetype.NewContext()
-				c.SetDPI(72)
-				c.SetFont(f)
-				size := opts.TextSize
-				if size == 0 { size = 24 }
-				c.SetFontSize(size)
-				c.SetClip(dst.Bounds())
-				c.SetDst(dst)
-				c.SetSrc(fg)
-				c.SetHinting(font.HintingFull)
+				f, err := freetype.ParseFont(fontBytes)
+				if err == nil {
+					// Parse color
+					var r, g, b uint8 = 255, 255, 255
+					if opts.TextColor != "" {
+						_, _ = fmt.Sscanf(opts.TextColor, "#%02x%02x%02x", &r, &g, &b)
+					}
+					fg := image.NewUniform(color.RGBA{r, g, b, 255})
+					
+					c := freetype.NewContext()
+					c.SetDPI(72)
+					c.SetFont(f)
+					size := opts.TextSize
+					if size == 0 { size = 24 }
+					c.SetFontSize(size)
+					c.SetClip(dst.Bounds())
+					c.SetDst(dst)
+					c.SetSrc(fg)
+					c.SetHinting(font.HintingFull)
 
-				pt := freetype.Pt(10, dst.Bounds().Dy()-10)
-				_, _ = c.DrawString(opts.TextOverlay, pt)
-				resizedImg = dst
+					pt := freetype.Pt(10, dst.Bounds().Dy()-10)
+					_, _ = c.DrawString(opts.TextOverlay, pt)
+					resizedImg = dst
+				}
+			} else {
+				fmt.Printf("Warning: failed to load font at %s: %v\n", fontPath, err)
 			}
 		} else {
-			fmt.Printf("Warning: failed to load font at %s\n", fontPath)
+			fmt.Println("Warning: No suitable font found for text overlay")
 		}
 	}
 

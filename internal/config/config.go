@@ -19,8 +19,8 @@ func LoadConfig() *Config {
 	apiKey := getEnv("API_KEY", "pro_resizer_key_2026")
 
 	// #nosec G101
-	if env == "production" && apiKey == "pro_resizer_key_2026" {
-		log.Fatalf("FATAL: Default API_KEY is not allowed in production. Please set a secure API_KEY environment variable.")
+	if env == "production" && (apiKey == "pro_resizer_key_2026" || apiKey == "") {
+		log.Fatalf("FATAL: A secure API_KEY environment variable is required in production. (Default or empty keys are not allowed)")
 	}
 
 	return &Config{
