@@ -14,22 +14,28 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN go build -o image-resizer ./cmd/server/main.go
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o image-resizer ./cmd/server/main.go
 
 # Final stage
 FROM alpine:latest
 
 WORKDIR /app
 
-# Install fonts for text overlay
-RUN apk add --no-cache ttf-dejavu
+# Install fonts for text overlay and ca-certificates for HTTPS
+RUN apk add --no-cache ttf-dejavu ca-certificates
 
-# Copy binary and static assets
+# Copy binary from builder
 COPY --from=builder /app/image-resizer .
-COPY --from=builder /app/web ./web
 
-# Ensure directories exist
-RUN mkdir -p static/uploads static/processed
+# BUG-16 FIX: Copy both web/ and static/ directories into the image.
+# Previously, only web/ was copied, but the app also needs static/
+# for uploads and processed file storage.
+COPY --from=builder /app/web ./web
+COPY --from=builder /app/static ./static
+
+# Ensure directories exist with proper permissions
+RUN mkdir -p static/uploads static/processed && \
+    chmod 750 static/uploads static/processed
 
 EXPOSE 5000
 

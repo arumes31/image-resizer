@@ -1,6 +1,59 @@
-
-temp/
+# Go build artifacts
+image-resizer
 *.exe
-*.zip
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test artifacts
+*.test
+*.out
+*.prof
+
+# Dependency directories
+vendor/
+
+# Upload and processed files (runtime generated)
 static/processed/*
 static/uploads/*
+!static/processed/.gitkeep
+!static/uploads/.gitkeep
+
+# Temporary files
+temp/
+*.zip
+
+# Python bytecode and caches (legacy app)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Qodo/Continue working directories
+.qodo/
+.continue/

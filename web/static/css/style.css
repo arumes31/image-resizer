@@ -392,7 +392,58 @@ input[type="number"], select {
 }
 
 .api-info p {
-    font-size: 0.85rem;
-    margin-bottom: 8px;
-    color: var(--text-muted);
+	font-size: 0.85rem;
+	margin-bottom: 8px;
+	color: var(--text-muted);
+}
+
+/* Color picker row for text overlay */
+.color-input-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.color-input-row label {
+	font-size: 0.875rem;
+	color: var(--text-muted);
+}
+
+.color-input-row input[type="color"] {
+	width: 36px;
+	height: 36px;
+	border: 1px solid var(--glass-border);
+	border-radius: 6px;
+	background: var(--glass-bg);
+	cursor: pointer;
+	padding: 2px;
+}
+
+/* Loading spinner animation */
+.loader {
+	width: 20px;
+	height: 20px;
+	border: 3px solid rgba(255, 255, 255, 0.3);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+	to { transform: rotate(360deg); }
+}
+
+/* Hidden utility class */
+.hidden {
+	display: none !important;
+}
+
+/* Footer styling */
+footer {
+	text-align: center;
+	margin-top: 30px;
+	padding-top: 20px;
+	border-top: 1px solid var(--glass-border);
+	color: var(--text-muted);
+	font-size: 0.8rem;
 }

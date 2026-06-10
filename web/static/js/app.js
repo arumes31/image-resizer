@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadAllBtn = document.getElementById('download-all-btn');
     const pixelateToggle = document.querySelector('input[name="filters"][value="pixelate"]');
     const pixelateInputRow = document.getElementById('pixelate-input');
+    const loader = document.getElementById('loader');
 
     let selectedFiles = [];
     let processedFileNames = [];
@@ -87,26 +88,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const formData = new FormData();
         selectedFiles.forEach(file => formData.append('files[]', file));
-        
+
         let operation = document.querySelector('input[name="operation"]:checked').value;
-        
+
+        // BUG-13 FIX: Social presets now send operation="fill" instead of
+        // operation="dimensions". The Go processor handles "fill" mode by
+        // using imaging.Fill (crop-to-fit) instead of imaging.Resize
+        // (stretch-to-fit), producing correct social media thumbnails.
         if (operation === 'social') {
             const [w, h] = socialPreset.value.split('x');
             formData.append('width', w);
             formData.append('height', h);
-            operation = 'dimensions';
+            operation = 'fill';
         } else {
             formData.append('percentage', document.getElementById('percentage').value);
             formData.append('width', document.getElementById('width').value);
             formData.append('height', document.getElementById('height').value);
         }
-        
+
         formData.append('operation', operation);
         formData.append('format', document.getElementById('format').value);
         formData.append('resize_method', document.getElementById('resize-method').value);
         formData.append('rotation', document.getElementById('rotation').value);
         formData.append('flip', document.getElementById('flip').value);
         formData.append('text_overlay', document.getElementById('text-overlay').value);
+        // BUG-15 FIX: Send text_color parameter to server.
+        // Previously, the text color was never sent, so text overlay
+        // always defaulted to white regardless of user selection.
+        formData.append('text_color', document.getElementById('text-color').value);
         formData.append('strip_exif', document.getElementById('strip-exif').checked ? 'on' : 'off');
         formData.append('copyright', document.getElementById('copyright').value);
         formData.append('rename_template', document.getElementById('rename-template').value);
@@ -115,7 +124,12 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('contrast', document.getElementById('contrast').value);
         formData.append('saturation', document.getElementById('saturation').value);
         formData.append('pixelate', document.getElementById('pixelate').value);
-        
+        // BUG-14 FIX: Send quality value to server.
+        // Previously, quality was never appended to the form data,
+        // so the server always defaulted to 100, producing very large files.
+        formData.append('quality', document.getElementById('quality').value);
+        formData.append('vignette', document.getElementById('vignette').checked ? 'on' : 'off');
+
         const watermarkFile = document.getElementById('watermark-file').files[0];
         if (watermarkFile) {
             formData.append('watermark', watermarkFile);
@@ -124,8 +138,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const filters = Array.from(document.querySelectorAll('input[name="filters"]:checked')).map(cb => cb.value);
         filters.forEach(f => formData.append('filters[]', f));
 
+        // IMP-06 FIX: Toggle loading spinner visibility during processing.
+        // The loader element existed in HTML but was never shown/hidden.
         processBtn.querySelector('span').textContent = 'Processing...';
         processBtn.disabled = true;
+        if (loader) loader.classList.remove('hidden');
 
         try {
             const response = await fetch('/', {
@@ -134,19 +151,28 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(errText || `HTTP ${response.status}`);
+                const errData = await response.json().catch(() => null);
+                const errMsg = errData?.error || `HTTP ${response.status}`;
+                throw new Error(errMsg);
             }
 
-            const results = await response.json();
-            processedFileNames = results.map(r => r.ProcessedName);
+            const data = await response.json();
+            // Server now returns { results: [...], errors?: [...] }
+            const results = data.results || data;
+            processedFileNames = results.map(r => r.processedName || r.ProcessedName);
             displayResults(results);
+
+            // Show partial errors if any
+            if (data.errors && data.errors.length > 0) {
+                console.warn('Some files had errors:', data.errors);
+            }
         } catch (error) {
             console.error('Error:', error);
             alert(`Processing failed: ${error.message}`);
         } finally {
             processBtn.querySelector('span').textContent = 'Process Images';
             processBtn.disabled = false;
+            if (loader) loader.classList.add('hidden');
         }
     });
 
@@ -163,26 +189,29 @@ document.addEventListener('DOMContentLoaded', () => {
         results.forEach(res => {
             const card = document.createElement('div');
             card.className = 'result-card';
-            
+
+            const pName = res.processedName || res.ProcessedName;
+            const pSize = res.newSize || res.NewSize;
+
             const img = document.createElement('img');
-            img.src = `/processed/${encodeURI(res.ProcessedName)}`;
-            img.alt = res.ProcessedName; // Safe as property assignment
-            
+            img.src = `/processed/${encodeURI(pName)}`;
+            img.alt = pName; // Safe as property assignment
+
             const p = document.createElement('p');
             p.style.fontSize = '0.75rem';
             p.style.marginBottom = '8px';
-            p.textContent = res.NewSize;
-            
+            p.textContent = pSize;
+
             const a = document.createElement('a');
-            a.href = `/processed/${encodeURI(res.ProcessedName)}`;
-            a.download = res.ProcessedName;
+            a.href = `/download/${encodeURI(pName)}`;
+            a.download = pName;
             a.className = 'download-link';
             a.textContent = 'Download';
-            
+
             card.appendChild(img);
             card.appendChild(p);
             card.appendChild(a);
-            
+
             resultsList.appendChild(card);
         });
 

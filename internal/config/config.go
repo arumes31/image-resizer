@@ -6,12 +6,12 @@ import (
 )
 
 type Config struct {
-	UploadFolder    string
-	ProcessedFolder string
+	UploadFolder     string
+	ProcessedFolder  string
 	MaxContentLength int64
-	Port            string
-	APIKey          string
-	Env             string
+	Port             string
+	APIKey           string
+	Env              string
 }
 
 func LoadConfig() *Config {
@@ -24,12 +24,12 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		UploadFolder:    getEnv("UPLOAD_FOLDER", "static/uploads"),
-		ProcessedFolder: getEnv("PROCESSED_FOLDER", "static/processed"),
+		UploadFolder:     getEnv("UPLOAD_FOLDER", "static/uploads"),
+		ProcessedFolder:  getEnv("PROCESSED_FOLDER", "static/processed"),
 		MaxContentLength: 16 * 1024 * 1024, // 16MB
-		Port:            getEnv("PORT", "5000"),
-		APIKey:          apiKey,
-		Env:             env,
+		Port:             getEnv("PORT", "5000"),
+		APIKey:           apiKey,
+		Env:              env,
 	}
 }
 
