@@ -151,13 +151,38 @@ header p {
     background: var(--primary);
 }
 
-input[type="number"] {
+input[type="number"], input[type="text"] {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
     border-radius: 8px;
     padding: 10px;
     color: var(--text-main);
     outline: none;
+    transition: all 0.2s ease;
+}
+
+input[type="number"]:focus, input[type="text"]:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Modern File Inputs */
+input[type="file"] {
+    color: var(--text-muted);
+}
+input[type="file"]::file-selector-button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-right: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.8rem;
+}
+input[type="file"]::file-selector-button:hover {
+    background: var(--primary-hover);
 }
 
 /* Modern Select Dropdowns */
