@@ -107,18 +107,31 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 }
 
 func (s *Server) handleUpload(c *gin.Context) {
-	form, _ := c.MultipartForm()
-	files := form.File["files[]"]
+	form, err := c.MultipartForm()
+	if err != nil || form == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid multipart form"})
+		return
+	}
+	files, ok := form.File["files[]"]
+	if !ok || len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No files uploaded"})
+		return
+	}
 	
-	percentage, _ := strconv.Atoi(c.PostForm("percentage"))
-	width, _ := strconv.Atoi(c.PostForm("width"))
-	height, _ := strconv.Atoi(c.PostForm("height"))
-	quality, _ := strconv.Atoi(c.PostForm("quality"))
-	rotation, _ := strconv.Atoi(c.PostForm("rotation"))
-	brightness, _ := strconv.ParseFloat(c.PostForm("brightness"), 64)
-	contrast, _ := strconv.ParseFloat(c.PostForm("contrast"), 64)
-	saturation, _ := strconv.ParseFloat(c.PostForm("saturation"), 64)
-	pixelate, _ := strconv.Atoi(c.PostForm("pixelate"))
+	percentage, _ := strconv.Atoi(c.DefaultPostForm("percentage", "100"))
+	if percentage <= 0 { percentage = 100 }
+	
+	width, _ := strconv.Atoi(c.DefaultPostForm("width", "0"))
+	height, _ := strconv.Atoi(c.DefaultPostForm("height", "0"))
+	
+	quality, _ := strconv.Atoi(c.DefaultPostForm("quality", "100"))
+	if quality <= 0 || quality > 100 { quality = 100 }
+	
+	rotation, _ := strconv.Atoi(c.DefaultPostForm("rotation", "0"))
+	brightness, _ := strconv.ParseFloat(c.DefaultPostForm("brightness", "0"), 64)
+	contrast, _ := strconv.ParseFloat(c.DefaultPostForm("contrast", "0"), 64)
+	saturation, _ := strconv.ParseFloat(c.DefaultPostForm("saturation", "0"), 64)
+	pixelate, _ := strconv.Atoi(c.DefaultPostForm("pixelate", "0"))
 	
 	watermarkFile, err := c.FormFile("watermark")
 	watermarkPath := ""

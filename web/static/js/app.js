@@ -133,12 +133,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: formData
             });
 
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText || `HTTP ${response.status}`);
+            }
+
             const results = await response.json();
             processedFileNames = results.map(r => r.ProcessedName);
             displayResults(results);
         } catch (error) {
             console.error('Error:', error);
-            alert('Processing failed');
+            alert(`Processing failed: ${error.message}`);
         } finally {
             processBtn.querySelector('span').textContent = 'Process Images';
             processBtn.disabled = false;
@@ -147,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     downloadAllBtn.addEventListener('click', () => {
         if (processedFileNames.length === 0) return;
-        const url = `/download-all?files=${processedFileNames.join(',')}`;
+        const url = `/download-all?files=${processedFileNames.map(encodeURIComponent).join(',')}`;
         window.location.href = url;
     });
 
@@ -158,11 +163,26 @@ document.addEventListener('DOMContentLoaded', () => {
         results.forEach(res => {
             const card = document.createElement('div');
             card.className = 'result-card';
-            card.innerHTML = `
-                <img src="/processed/${res.ProcessedName}" alt="${res.ProcessedName}">
-                <p style="font-size: 0.75rem; margin-bottom: 8px;">${res.NewSize}</p>
-                <a href="/processed/${res.ProcessedName}" download="${res.ProcessedName}" class="download-link">Download</a>
-            `;
+            
+            const img = document.createElement('img');
+            img.src = `/processed/${encodeURI(res.ProcessedName)}`;
+            img.alt = res.ProcessedName; // Safe as property assignment
+            
+            const p = document.createElement('p');
+            p.style.fontSize = '0.75rem';
+            p.style.marginBottom = '8px';
+            p.textContent = res.NewSize;
+            
+            const a = document.createElement('a');
+            a.href = `/processed/${encodeURI(res.ProcessedName)}`;
+            a.download = res.ProcessedName;
+            a.className = 'download-link';
+            a.textContent = 'Download';
+            
+            card.appendChild(img);
+            card.appendChild(p);
+            card.appendChild(a);
+            
             resultsList.appendChild(card);
         });
 

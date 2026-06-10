@@ -26,7 +26,7 @@ const (
 
 var ResizeMethods = map[string]imaging.ResampleFilter{
 	"nearest":  imaging.NearestNeighbor,
-	"bilinear": imaging.Box,
+	"bilinear": imaging.Linear,
 	"bicubic":  imaging.CatmullRom,
 	"lanczos":  imaging.Lanczos,
 }
@@ -74,6 +74,36 @@ func CreatePDF(imagePaths []string, destPath string) error {
 		pdf.ImageOptions(path, 10, 10, 190, 0, false, gofpdf.ImageOptions{ImageType: "", ReadDpi: true}, 0, "")
 	}
 	return pdf.OutputFileAndClose(destPath)
+}
+
+func min(a, b int) uint8 {
+	val := a
+	if b < a {
+		val = b
+	}
+	if val < 0 {
+		return 0
+	}
+	if val > 255 {
+		return 255
+	}
+	return uint8(val)
+}
+
+func applySepia(img image.Image) image.Image {
+	bounds := img.Bounds()
+	dst := image.NewRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			c := color.RGBAModel.Convert(img.At(x, y)).(color.RGBA)
+			r, g, b := float64(c.R), float64(c.G), float64(c.B)
+			newR := min(int(0.393*r+0.769*g+0.189*b), 255)
+			newG := min(int(0.349*r+0.686*g+0.168*b), 255)
+			newB := min(int(0.272*r+0.534*g+0.131*b), 255)
+			dst.Set(x, y, color.RGBA{newR, newG, newB, c.A})
+		}
+	}
+	return dst
 }
 
 func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult, error) {
@@ -139,7 +169,7 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 		case "invert":
 			img = imaging.Invert(img)
 		case "sepia":
-			img = imaging.AdjustContrast(img, 10)
+			img = applySepia(img)
 		case "blur":
 			img = imaging.Blur(img, 2.0)
 		case "sharpen":
@@ -209,15 +239,28 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 		dst := image.NewRGBA(resizedImg.Bounds())
 		draw.Draw(dst, dst.Bounds(), resizedImg, image.Point{}, draw.Src)
 
-		fontBytes, err := os.ReadFile("C:\\Windows\\Fonts\\arial.ttf")
+		fontPath := os.Getenv("FONT_PATH")
+		if fontPath == "" {
+			fontPath = "C:\\Windows\\Fonts\\arial.ttf" // Fallback
+		}
+		
+		fontBytes, err := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
 		if err == nil {
 			f, err := freetype.ParseFont(fontBytes)
 			if err == nil {
-				fg := image.NewUniform(color.White)
+				// Parse color
+				var r, g, b uint8 = 255, 255, 255
+				if opts.TextColor != "" {
+					_, _ = fmt.Sscanf(opts.TextColor, "#%02x%02x%02x", &r, &g, &b)
+				}
+				fg := image.NewUniform(color.RGBA{r, g, b, 255})
+				
 				c := freetype.NewContext()
 				c.SetDPI(72)
 				c.SetFont(f)
-				c.SetFontSize(24)
+				size := opts.TextSize
+				if size == 0 { size = 24 }
+				c.SetFontSize(size)
 				c.SetClip(dst.Bounds())
 				c.SetDst(dst)
 				c.SetSrc(fg)
@@ -227,6 +270,8 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 				_, _ = c.DrawString(opts.TextOverlay, pt)
 				resizedImg = dst
 			}
+		} else {
+			fmt.Printf("Warning: failed to load font at %s\n", fontPath)
 		}
 	}
 
@@ -248,7 +293,12 @@ func ProcessImage(srcPath, destDir string, opts ProcessOptions) (*ProcessResult,
 	
 	destPath := filepath.Join(destDir, processedFileName)
 
-	err = imaging.Save(resizedImg, destPath)
+	var saveOpts []imaging.EncodeOption
+	if opts.Quality > 0 {
+		saveOpts = append(saveOpts, imaging.JPEGQuality(opts.Quality))
+	}
+
+	err = imaging.Save(resizedImg, destPath, saveOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save image: %w", err)
 	}
