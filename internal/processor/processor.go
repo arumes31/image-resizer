@@ -144,7 +144,7 @@ func applySepia(img image.Image) image.Image {
 			newR := clampUint8(int(0.393*r + 0.769*g + 0.189*b))
 			newG := clampUint8(int(0.349*r + 0.686*g + 0.168*b))
 			newB := clampUint8(int(0.272*r + 0.534*g + 0.131*b))
-			dst.Set(x, y, color.RGBA{newR, newG, newB, uint8(a32 >> 8)})
+			dst.Set(x, y, color.RGBA{newR, newG, newB, clampUint8(int(a32 >> 8))})
 		}
 	}
 	return dst
@@ -177,7 +177,7 @@ func applyVignette(img image.Image) image.Image {
 				R: uint8(float64(cR>>8) * factor),
 				G: uint8(float64(cG>>8) * factor),
 				B: uint8(float64(cB>>8) * factor),
-				A: uint8(cA >> 8),
+				A: clampUint8(int(cA >> 8)),
 			})
 		}
 	}
