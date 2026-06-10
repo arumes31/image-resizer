@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Image Resizer Pro - Go Edition</title>
+	<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="dark-theme">
+<div class="glass-container">
+	<header>
+		<div class="logo-container">
+			<img src="/static/assets/logo.svg" alt="Logo" class="app-logo">
+			<h1>Image Resizer <span class="badge">Pro</span></h1>
+		</div>
+		<p>High-performance image processing powered by Go</p>
+	</header>
+
+	<main>
+		<section class="upload-section" id="drop-zone">
+			<div class="upload-content">
+				<svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+				</svg>
+				<p>Drag & Drop images or <span class="browse">Browse</span></p>
+				<input type="file" id="file-input" multiple accept="image/*" hidden>
+			</div>
+		</section>
+
+		<section class="controls-section">
+			<div class="control-group">
+				<h3>Resize Mode</h3>
+				<div class="toggle-group">
+					<input type="radio" id="mode-percentage" name="operation" value="percentage" checked>
+					<label for="mode-percentage">Percentage</label>
+					<input type="radio" id="mode-dimensions" name="operation" value="dimensions">
+					<label for="mode-dimensions">Dimensions</label>
+					<input type="radio" id="mode-social" name="operation" value="social">
+					<label for="mode-social">Social Presets</label>
+				</div>
+			</div>
+
+			<div class="control-group hidden" id="social-input">
+				<label for="social-preset">Preset</label>
+				<select id="social-preset">
+					<option value="1080x1080">Instagram Post (1:1)</option>
+					<option value="1080x1350">Instagram Portrait (4:5)</option>
+					<option value="1080x1920">Instagram Story / Reel</option>
+					<option value="1200x628">Facebook Post</option>
+					<option value="1200x675">Twitter Post</option>
+					<option value="1920x1080">YouTube Thumbnail</option>
+					<option value="1200x627">LinkedIn Post</option>
+				</select>
+			</div>
+
+			<div class="control-group" id="percentage-input">
+				<label for="percentage">Scale (%)</label>
+				<input type="number" id="percentage" name="percentage" value="50" min="1" max="500">
+			</div>
+
+			<div class="control-group hidden" id="dimensions-input">
+				<div class="dimension-fields">
+					<div>
+						<label for="width">Width (px)</label>
+						<input type="number" id="width" name="width" placeholder="Auto" min="1">
+					</div>
+					<div>
+						<label for="height">Height (px)</label>
+						<input type="number" id="height" name="height" placeholder="Auto" min="1">
+					</div>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<label for="format">Output Format</label>
+				<select id="format" name="format">
+					<option value="jpeg">JPEG</option>
+					<option value="png">PNG</option>
+					<option value="webp">WebP</option>
+					<option value="gif">GIF</option>
+					<option value="ico">ICO</option>
+					<option value="pdf">PDF (Document)</option>
+				</select>
+			</div>
+
+			<!-- BUG-14 FIX: Add quality input control. Previously, the quality
+			     value was never sent from the frontend, so the server always
+			     defaulted to 100, producing very large JPEG files. -->
+			<div class="control-group">
+				<label for="quality">Quality (JPEG)</label>
+				<input type="number" id="quality" name="quality" value="85" min="1" max="100">
+			</div>
+
+			<div class="control-group">
+				<h3>Composition</h3>
+				<div class="composition-controls">
+					<select id="crop" name="crop">
+						<option value="none">No Cropping</option>
+						<option value="1:1">Square (1:1)</option>
+						<option value="16:9">Wide (16:9)</option>
+						<option value="4:3">Photo (4:3)</option>
+					</select>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<h3>Transform</h3>
+				<div class="transform-controls">
+					<select id="rotation" name="rotation">
+						<option value="0">No Rotation</option>
+						<option value="90">Rotate 90° CW</option>
+						<option value="180">Rotate 180°</option>
+						<option value="270">Rotate 90° CCW</option>
+					</select>
+					<select id="flip" name="flip">
+						<option value="">No Flip</option>
+						<option value="h">Flip Horizontal</option>
+						<option value="v">Flip Vertical</option>
+						<option value="both">Flip Both</option>
+					</select>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<label for="resize-method">Method</label>
+				<select id="resize-method" name="resize_method">
+					<option value="lanczos">Lanczos (Highest Quality)</option>
+					<option value="bicubic">Bicubic (Sharp)</option>
+					<option value="bilinear">Bilinear (Fast)</option>
+					<option value="nearest">Nearest (Pixelated)</option>
+				</select>
+			</div>
+
+			<div class="control-group filters-group">
+				<h3>Filters</h3>
+				<div class="filter-checkboxes">
+					<label><input type="checkbox" name="filters" value="grayscale"> Grayscale</label>
+					<label><input type="checkbox" name="filters" value="sepia"> Sepia</label>
+					<label><input type="checkbox" name="filters" value="invert"> Invert</label>
+					<label><input type="checkbox" name="filters" value="blur"> Blur</label>
+					<label><input type="checkbox" name="filters" value="sharpen"> Sharpen</label>
+					<label><input type="checkbox" name="filters" value="pixelate"> Pixelate</label>
+					<label><input type="checkbox" name="filters" value="noir"> Noir</label>
+					<label><input type="checkbox" name="filters" value="vivid"> Vivid</label>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<h3>Batch Renaming</h3>
+				<div class="renaming-controls">
+					<input type="text" id="rename-template" name="rename_template" placeholder="Template: {name}_pro" title="Use {name} for original filename">
+				</div>
+			</div>
+
+			<div class="control-group adjustments-group">
+				<h3>Adjustments</h3>
+				<div class="adjustment-sliders">
+					<div class="slider-row">
+						<label for="brightness">Brightness</label>
+						<input type="range" id="brightness" name="brightness" min="-100" max="100" value="0">
+						<span class="value">0</span>
+					</div>
+					<div class="slider-row">
+						<label for="contrast">Contrast</label>
+						<input type="range" id="contrast" name="contrast" min="-100" max="100" value="0">
+						<span class="value">0</span>
+					</div>
+					<div class="slider-row">
+						<label for="saturation">Saturation</label>
+						<input type="range" id="saturation" name="saturation" min="-100" max="100" value="0">
+						<span class="value">0</span>
+					</div>
+					<div class="slider-row" id="pixelate-input" style="display:none;">
+						<label for="pixelate">Pixel Size</label>
+						<input type="range" id="pixelate" name="pixelate" min="1" max="100" value="10">
+						<span class="value">10</span>
+					</div>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<h3>Watermark & Text</h3>
+				<div class="advanced-inputs">
+					<input type="text" id="text-overlay" name="text_overlay" placeholder="Text Overlay">
+					<!-- BUG-15 FIX: Add text color picker. Previously, the text color
+					     was never sent to the server, so text overlay always used white. -->
+					<div class="color-input-row">
+						<label for="text-color">Text Color</label>
+						<input type="color" id="text-color" name="text_color" value="#ffffff">
+					</div>
+					<div class="file-select-mini">
+						<label for="watermark-file">Watermark Image:</label>
+						<input type="file" id="watermark-file" accept="image/*">
+					</div>
+				</div>
+			</div>
+
+			<div class="control-group">
+				<h3>Metadata & Privacy</h3>
+				<div class="metadata-controls">
+					<label><input type="checkbox" id="strip-exif" name="strip_exif" checked> Strip EXIF (Privacy)</label>
+					<!-- BUG-10 FIX: Add vignette checkbox. The Vignette option was
+					     defined in the backend but had no UI control to enable it. -->
+					<label><input type="checkbox" id="vignette" name="vignette"> Vignette Effect</label>
+					<input type="text" id="copyright" name="copyright" placeholder="Copyright/Author">
+				</div>
+			</div>
+
+			<button id="process-btn" class="primary-btn">
+				<span>Process Images</span>
+				<!-- IMP-06 FIX: Loader element now has an id for JS toggling -->
+				<div id="loader" class="loader hidden"></div>
+			</button>
+		</section>
+
+		<section class="results-section hidden" id="results-container">
+			<div class="results-header">
+				<h3>Processed Files</h3>
+				<button id="download-all-btn" class="secondary-btn">Download All (ZIP)</button>
+			</div>
+			<div id="results-list" class="results-grid"></div>
+		</section>
+		<section class="developer-section">
+			<h3>Developer API</h3>
+			<div class="api-info">
+				<p>Endpoint: <code>/api/v1/process</code></p>
+				<p>Method: <code>POST</code> (Multipart Form)</p>
+				<p>API Key required in Header: <code>X-API-Key</code></p>
+			</div>
+		</section>
+	</main>
+
+	<footer>
+		<p>&copy; 2026 Image Resizer Pro. Built with Go & Vanilla JS.</p>
+	</footer>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

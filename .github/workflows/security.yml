@@ -1,0 +1,24 @@
+name: Security & Vulnerability Scan
+
+on:
+  push:
+    branches: [ main, v0.5, v2_test ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.4'
+          check-latest: true
+
+      - name: Run Govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./...
+
+      - name: Run Gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest && gosec ./...
