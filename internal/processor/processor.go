@@ -13,9 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"github.com/golang/freetype"
 	"github.com/jung-kurt/gofpdf"
+	"github.com/sergeymakinen/go-ico"
 	"golang.org/x/image/font"
 )
 
@@ -513,9 +515,36 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		saveOpts = append(saveOpts, imaging.JPEGQuality(opts.Quality))
 	}
 
-	err = imaging.Save(resizedImg, destPath, saveOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save image: %w", err)
+	switch ext {
+	case "webp":
+		out, cErr := os.Create(destPath)
+		if cErr != nil {
+			return nil, fmt.Errorf("failed to create webp file: %w", cErr)
+		}
+		defer out.Close()
+		var webpOpts *webp.Options
+		if opts.Quality > 0 {
+			webpOpts = &webp.Options{Lossless: false, Quality: float32(opts.Quality)}
+		}
+		eErr := webp.Encode(out, resizedImg, webpOpts)
+		if eErr != nil {
+			return nil, fmt.Errorf("failed to save webp image: %w", eErr)
+		}
+	case "ico":
+		out, cErr := os.Create(destPath)
+		if cErr != nil {
+			return nil, fmt.Errorf("failed to create ico file: %w", cErr)
+		}
+		defer out.Close()
+		eErr := ico.Encode(out, resizedImg)
+		if eErr != nil {
+			return nil, fmt.Errorf("failed to save ico image: %w", eErr)
+		}
+	default:
+		sErr := imaging.Save(resizedImg, destPath, saveOpts...)
+		if sErr != nil {
+			return nil, fmt.Errorf("failed to save image: %w", sErr)
+		}
 	}
 
 	return &ProcessResult{

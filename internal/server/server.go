@@ -293,9 +293,9 @@ func (s *Server) handleUpload(c *gin.Context) {
 		processedPaths = append(processedPaths, res.NewFilePath)
 	}
 
-	// BUG-04 FIX: When PDF output is requested, append the PDF result to
-	// the existing results array instead of replacing it. This preserves
-	// individual image results alongside the PDF document.
+	// BUG-04 FIX (reverted): When PDF output is requested, replace the results array
+	// with just the PDF document instead of returning both the PDF and intermediate JPGs.
+	// This prevents the frontend from displaying intermediate JPGs to the user.
 	if opts.Format == "pdf" && len(processedPaths) > 0 {
 		pdfPath := filepath.Join(s.cfg.ProcessedFolder, fmt.Sprintf("document_%d.pdf", time.Now().UnixMilli()))
 		if err := processor.CreatePDF(processedPaths, pdfPath); err == nil {
@@ -306,7 +306,7 @@ func (s *Server) handleUpload(c *gin.Context) {
 				NewSize:       "PDF Document",
 				NewFilePath:   pdfPath,
 			}
-			results = append(results, pdfResult)
+			results = []processor.ProcessResult{pdfResult}
 		} else {
 			errors = append(errors, fmt.Sprintf("failed to create PDF: %v", err))
 		}
