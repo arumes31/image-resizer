@@ -1,4 +1,4 @@
-# 🎨 Image Resizer Pro (Go Edition)
+# <img src="web/static/assets/logo.svg" width="48" height="48" valign="middle"> Image Resizer Pro (Go Edition)
 
 ![Build Status](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/build.yml?branch=v0.5&style=for-the-badge&logo=github&label=Build)
 ![Security Audit](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/security.yml?branch=v0.5&style=for-the-badge&logo=pre-commit&label=Security)
