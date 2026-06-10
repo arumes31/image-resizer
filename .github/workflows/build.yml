@@ -37,6 +37,7 @@ jobs:
             type=ref,event=pr
             type=ref,event=tag
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
