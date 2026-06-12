@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,235 +10,833 @@
 	<link rel="apple-touch-icon" href="/static/assets/logo.svg">
 	<link rel="mask-icon" href="/static/assets/logo.svg" color="#6366f1">
 </head>
+
 <body class="dark-theme">
-<div class="glass-container">
-	<header>
-		<div class="logo-container">
-			<img src="/static/assets/logo.svg" alt="Logo" class="app-logo">
-			<h1>Image Resizer</h1>
-		</div>
-		<p>High-performance image processing powered by Go</p>
-	</header>
-
-	<main>
-		<section class="upload-section" id="drop-zone">
-			<div class="upload-content">
-				<svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-				</svg>
-				<p>Drag & Drop images or <span class="browse">Browse</span></p>
-				<input type="file" id="file-input" multiple accept="image/*" hidden>
+	<div class="glass-container">
+		<header>
+			<div class="logo-container">
+				<img src="/static/assets/logo.svg" alt="Logo" class="app-logo">
+				<h1>Image Resizer</h1>
 			</div>
-		</section>
+			<p>High-performance image processing powered by Go</p>
+		</header>
 
-		<section class="controls-section">
-			<div class="control-group">
-				<h3>Resize Mode</h3>
-				<div class="toggle-group">
-					<input type="radio" id="mode-percentage" name="operation" value="percentage" checked>
-					<label for="mode-percentage">Percentage</label>
-					<input type="radio" id="mode-dimensions" name="operation" value="dimensions">
-					<label for="mode-dimensions">Dimensions</label>
-					<input type="radio" id="mode-social" name="operation" value="social">
-					<label for="mode-social">Social Presets</label>
+		<main>
+			<section class="upload-section" id="drop-zone">
+				<div class="upload-content">
+					<svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+					</svg>
+					<p>Drag & Drop images or <span class="browse">Browse</span></p>
+					<input type="file" id="file-input" multiple
+						accept="image/*,.avif,.heic,.heif,.jxl,.svg,.cr2,.cr3,.nef,.arw,.dng,.dcm,.dicom,.tif,.tiff"
+						hidden>
 				</div>
-			</div>
+			</section>
 
-			<div class="control-group hidden" id="social-input">
-				<label for="social-preset">Preset</label>
-				<select id="social-preset">
-					<option value="1080x1080">Instagram Post (1:1)</option>
-					<option value="1080x1350">Instagram Portrait (4:5)</option>
-					<option value="1080x1920">Instagram Story / Reel</option>
-					<option value="1200x628">Facebook Post</option>
-					<option value="1200x675">Twitter Post</option>
-					<option value="1920x1080">YouTube Thumbnail</option>
-					<option value="1200x627">LinkedIn Post</option>
-				</select>
-			</div>
-
-			<div class="control-group" id="percentage-input">
-				<label for="percentage">Scale (%)</label>
-				<input type="number" id="percentage" name="percentage" value="50" min="1" max="500">
-			</div>
-
-			<div class="control-group hidden" id="dimensions-input">
-				<div class="dimension-fields">
-					<div>
-						<label for="width">Width (px)</label>
-						<input type="number" id="width" name="width" placeholder="Auto" min="1">
-					</div>
-					<div>
-						<label for="height">Height (px)</label>
-						<input type="number" id="height" name="height" placeholder="Auto" min="1">
+			<section class="controls-section">
+				<div class="control-group">
+					<h3>Resize Mode</h3>
+					<div class="toggle-group">
+						<input type="radio" id="mode-percentage" name="operation" value="percentage" checked>
+						<label for="mode-percentage">Percentage</label>
+						<input type="radio" id="mode-dimensions" name="operation" value="dimensions">
+						<label for="mode-dimensions">Dimensions</label>
+						<input type="radio" id="mode-social" name="operation" value="social">
+						<label for="mode-social">Social Presets</label>
 					</div>
 				</div>
-			</div>
 
-			<div class="control-group">
-				<label for="format">Output Format</label>
-				<select id="format" name="format">
-					<option value="jpeg">JPEG</option>
-					<option value="png">PNG</option>
-					<option value="webp">WebP</option>
-					<option value="gif">GIF</option>
-					<option value="ico">ICO</option>
-					<option value="pdf">PDF (Document)</option>
-				</select>
-			</div>
+				<div class="control-group hidden" id="social-input">
+					<label for="social-preset">Preset</label>
+					<select id="social-preset" name="social_preset">
+						<option value="1080x1080" data-name="Instagram Post">Instagram Post (1:1)</option>
+						<option value="1080x1350" data-name="Instagram Portrait">Instagram Portrait (4:5)</option>
+						<option value="1080x1920" data-name="Instagram Story">Instagram Story / Reel</option>
+						<option value="1200x630" data-name="Facebook Post">Facebook Post</option>
+						<option value="1200x675" data-name="Twitter Post">Twitter Post</option>
+						<option value="1280x720" data-name="YouTube Thumbnail">YouTube Thumbnail</option>
+						<option value="1200x627" data-name="LinkedIn Post">LinkedIn Post</option>
+						<option value="1584x396" data-name="LinkedIn Banner">LinkedIn Banner</option>
+						<option value="1500x500" data-name="Twitter/X Header">Twitter/X Header</option>
+						<option value="128x128" data-name="Slack Emoji">Slack Emoji (128x128)</option>
+						<option value="128x128" data-name="Discord Emoji">Discord Emoji (128x128)</option>
+						<option value="1000x1500" data-name="Pinterest Pin">Pinterest Pin</option>
+						<option value="1000x2100" data-name="Pinterest Long Pin">Pinterest Long Pin</option>
+						<option value="512x512" data-name="Favicon Pack">Favicon Pack</option>
+						<option value="320x160" data-name="Twitch Panel">Twitch Panel</option>
+						<option value="1200x480" data-name="Twitch Banner">Twitch Banner</option>
+						<option value="1242x2688" data-name="App Store iOS">App Store iOS</option>
+						<option value="1080x1920" data-name="App Store Android">App Store Android</option>
+						<option value="1080x1350" data-name="Instagram Carousel">Instagram Carousel</option>
+					</select>
+				</div>
 
-			<!-- BUG-14 FIX: Add quality input control. Previously, the quality
+				<div class="control-group" id="percentage-input">
+					<label for="percentage">Scale (%)</label>
+					<input type="number" id="percentage" name="percentage" value="50" min="1" max="500">
+				</div>
+
+				<div class="control-group hidden" id="dimensions-input">
+					<div class="dimension-fields">
+						<div>
+							<label for="width">Width (px)</label>
+							<input type="number" id="width" name="width" placeholder="Auto" min="1">
+						</div>
+						<div>
+							<label for="height">Height (px)</label>
+							<input type="number" id="height" name="height" placeholder="Auto" min="1">
+						</div>
+					</div>
+				</div>
+
+				<div class="control-group">
+					<label for="format">Output Format</label>
+					<select id="format" name="format">
+						<option value="jpeg">JPEG</option>
+						<option value="png">PNG</option>
+						<option value="webp">WebP</option>
+						<option value="gif">GIF</option>
+						<option value="ico">ICO</option>
+						<option value="tiff">TIFF</option>
+						<option value="avif">AVIF (requires CGO)</option>
+						<option value="pdf">PDF (Document)</option>
+					</select>
+				</div>
+
+				<!-- BUG-14 FIX: Add quality input control. Previously, the quality
 			     value was never sent from the frontend, so the server always
 			     defaulted to 100, producing very large JPEG files. -->
-			<div class="control-group">
-				<label for="quality">Quality (JPEG)</label>
-				<input type="number" id="quality" name="quality" value="85" min="1" max="100">
-			</div>
+				<div class="control-group">
+					<label for="quality">Quality (JPEG)</label>
+					<input type="number" id="quality" name="quality" value="85" min="1" max="100">
+				</div>
 
-			<div class="control-group">
-				<h3>Composition</h3>
-				<div class="composition-controls">
-					<select id="crop" name="crop">
-						<option value="none">No Cropping</option>
-						<option value="1:1">Square (1:1)</option>
-						<option value="16:9">Wide (16:9)</option>
-						<option value="4:3">Photo (4:3)</option>
+				<div class="control-group">
+					<h3>Composition</h3>
+					<div class="composition-controls">
+						<select id="crop" name="crop">
+							<option value="none">No Cropping</option>
+							<option value="1:1">Square (1:1)</option>
+							<option value="16:9">Wide (16:9)</option>
+							<option value="4:3">Photo (4:3)</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="control-group">
+					<h3>Transform</h3>
+					<div class="transform-controls">
+						<select id="rotation" name="rotation">
+							<option value="0">No Rotation</option>
+							<option value="90">Rotate 90° CW</option>
+							<option value="180">Rotate 180°</option>
+							<option value="270">Rotate 90° CCW</option>
+						</select>
+						<select id="flip" name="flip">
+							<option value="">No Flip</option>
+							<option value="h">Flip Horizontal</option>
+							<option value="v">Flip Vertical</option>
+							<option value="both">Flip Both</option>
+						</select>
+					</div>
+				</div>
+
+				<div class="control-group">
+					<label for="resize-method">Method</label>
+					<select id="resize-method" name="resize_method">
+						<option value="lanczos">Lanczos (Highest Quality)</option>
+						<option value="bicubic">Bicubic (Sharp)</option>
+						<option value="bilinear">Bilinear (Fast)</option>
+						<option value="nearest">Nearest (Pixelated)</option>
 					</select>
 				</div>
-			</div>
 
-			<div class="control-group">
-				<h3>Transform</h3>
-				<div class="transform-controls">
-					<select id="rotation" name="rotation">
-						<option value="0">No Rotation</option>
-						<option value="90">Rotate 90° CW</option>
-						<option value="180">Rotate 180°</option>
-						<option value="270">Rotate 90° CCW</option>
-					</select>
-					<select id="flip" name="flip">
-						<option value="">No Flip</option>
-						<option value="h">Flip Horizontal</option>
-						<option value="v">Flip Vertical</option>
-						<option value="both">Flip Both</option>
-					</select>
-				</div>
-			</div>
-
-			<div class="control-group">
-				<label for="resize-method">Method</label>
-				<select id="resize-method" name="resize_method">
-					<option value="lanczos">Lanczos (Highest Quality)</option>
-					<option value="bicubic">Bicubic (Sharp)</option>
-					<option value="bilinear">Bilinear (Fast)</option>
-					<option value="nearest">Nearest (Pixelated)</option>
-				</select>
-			</div>
-
-			<div class="control-group filters-group">
-				<h3>Filters</h3>
-				<div class="filter-checkboxes">
-					<label><input type="checkbox" name="filters" value="grayscale"> Grayscale</label>
-					<label><input type="checkbox" name="filters" value="sepia"> Sepia</label>
-					<label><input type="checkbox" name="filters" value="invert"> Invert</label>
-					<label><input type="checkbox" name="filters" value="blur"> Blur</label>
-					<label><input type="checkbox" name="filters" value="sharpen"> Sharpen</label>
-					<label><input type="checkbox" name="filters" value="pixelate"> Pixelate</label>
-					<label><input type="checkbox" name="filters" value="noir"> Noir</label>
-					<label><input type="checkbox" name="filters" value="vivid"> Vivid</label>
-				</div>
-			</div>
-
-			<div class="control-group">
-				<h3>Batch Renaming</h3>
-				<div class="renaming-controls">
-					<input type="text" id="rename-template" name="rename_template" placeholder="Template: {name}_processed" title="Use {name} for original filename">
-				</div>
-			</div>
-
-			<div class="control-group adjustments-group">
-				<h3>Adjustments</h3>
-				<div class="adjustment-sliders">
-					<div class="slider-row">
-						<label for="brightness">Brightness</label>
-						<input type="range" id="brightness" name="brightness" min="-100" max="100" value="0">
-						<span class="value">0</span>
-					</div>
-					<div class="slider-row">
-						<label for="contrast">Contrast</label>
-						<input type="range" id="contrast" name="contrast" min="-100" max="100" value="0">
-						<span class="value">0</span>
-					</div>
-					<div class="slider-row">
-						<label for="saturation">Saturation</label>
-						<input type="range" id="saturation" name="saturation" min="-100" max="100" value="0">
-						<span class="value">0</span>
-					</div>
-					<div class="slider-row" id="pixelate-input" style="display:none;">
-						<label for="pixelate">Pixel Size</label>
-						<input type="range" id="pixelate" name="pixelate" min="1" max="100" value="10">
-						<span class="value">10</span>
+				<div class="control-group filters-group">
+					<h3>Filters</h3>
+					<div class="filter-checkboxes">
+						<label><input type="checkbox" name="filters" value="grayscale"> Grayscale</label>
+						<label><input type="checkbox" name="filters" value="sepia"> Sepia</label>
+						<label><input type="checkbox" name="filters" value="invert"> Invert</label>
+						<label><input type="checkbox" name="filters" value="blur"> Blur</label>
+						<label><input type="checkbox" name="filters" value="sharpen"> Sharpen</label>
+						<label><input type="checkbox" name="filters" value="pixelate"> Pixelate</label>
+						<label><input type="checkbox" name="filters" value="noir"> Noir</label>
+						<label><input type="checkbox" name="filters" value="vivid"> Vivid</label>
 					</div>
 				</div>
-			</div>
 
-			<div class="control-group">
-				<h3>Watermark & Text</h3>
-				<div class="advanced-inputs">
-					<input type="text" id="text-overlay" name="text_overlay" placeholder="Text Overlay">
-					<!-- BUG-15 FIX: Add text color picker. Previously, the text color
+				<div class="control-group">
+					<h3>Batch Renaming</h3>
+					<div class="renaming-controls">
+						<input type="text" id="rename-template" name="rename_template"
+							placeholder="Template: {name}_processed" title="Use {name} for original filename">
+					</div>
+				</div>
+
+				<div class="control-group adjustments-group">
+					<h3>Adjustments</h3>
+					<div class="adjustment-sliders">
+						<div class="slider-row">
+							<label for="brightness">Brightness</label>
+							<input type="range" id="brightness" name="brightness" min="-100" max="100" value="0">
+							<span class="value">0</span>
+						</div>
+						<div class="slider-row">
+							<label for="contrast">Contrast</label>
+							<input type="range" id="contrast" name="contrast" min="-100" max="100" value="0">
+							<span class="value">0</span>
+						</div>
+						<div class="slider-row">
+							<label for="saturation">Saturation</label>
+							<input type="range" id="saturation" name="saturation" min="-100" max="100" value="0">
+							<span class="value">0</span>
+						</div>
+						<div class="slider-row" id="pixelate-input" style="display:none;">
+							<label for="pixelate">Pixel Size</label>
+							<input type="range" id="pixelate" name="pixelate" min="1" max="100" value="10">
+							<span class="value">10</span>
+						</div>
+					</div>
+				</div>
+
+				<!-- Professional Adjustments -->
+				<div class="section-header" onclick="toggleSection('proAdjustments')">
+					<h3>Professional Adjustments</h3>
+					<span class="toggle-icon">▼</span>
+				</div>
+				<div id="proAdjustments" class="collapsible-section collapsed">
+					<div class="pro-adjustments-inner">
+						<!-- HSL -->
+						<div class="control-group">
+							<label>Hue <span id="hueValue">0</span>°</label>
+							<input type="range" name="hue" id="hue" min="-180" max="180" value="0">
+						</div>
+						<div class="control-group">
+							<label>Lightness <span id="lightnessValue">0</span></label>
+							<input type="range" name="lightness" id="lightness" min="-100" max="100" value="0">
+						</div>
+
+						<!-- Temperature & Tint -->
+						<div class="control-group">
+							<label>Temperature <span id="temperatureValue">0</span></label>
+							<input type="range" name="temperature" id="temperature" min="-100" max="100" value="0">
+						</div>
+						<div class="control-group">
+							<label>Tint <span id="tintValue">0</span></label>
+							<input type="range" name="tint" id="tint" min="-100" max="100" value="0">
+						</div>
+
+						<!-- Shadow/Highlight Recovery -->
+						<div class="control-group">
+							<label>Shadow Recovery <span id="shadowRecoveryValue">0</span></label>
+							<input type="range" name="shadow_recovery" id="shadow_recovery" min="0" max="100" value="0">
+						</div>
+						<div class="control-group">
+							<label>Highlight Recovery <span id="highlightRecoveryValue">0</span></label>
+							<input type="range" name="highlight_recovery" id="highlight_recovery" min="0" max="100"
+								value="0">
+						</div>
+
+						<!-- Levels -->
+						<div class="control-group">
+							<label>Levels Black <span id="levelsBlackValue">0</span></label>
+							<input type="range" name="levels_black" id="levels_black" min="0" max="255" value="0">
+						</div>
+						<div class="control-group">
+							<label>Levels White <span id="levelsWhiteValue">255</span></label>
+							<input type="range" name="levels_white" id="levels_white" min="0" max="255" value="255">
+						</div>
+						<div class="control-group">
+							<label>Levels Gamma <span id="levelsGammaValue">1.0</span></label>
+							<input type="range" name="levels_gamma" id="levels_gamma" min="1" max="100" value="10"
+								step="1">
+							<!-- Maps to 0.1-10.0: value/10 -->
+						</div>
+
+						<!-- Curves (simplified: provide preset curves) -->
+						<div class="control-group">
+							<label>Curves Preset</label>
+							<select name="curves_preset" id="curvesPreset">
+								<option value="">None</option>
+								<option value="high-contrast">High Contrast</option>
+								<option value="low-contrast">Low Contrast</option>
+								<option value="brighten">Brighten Midtones</option>
+								<option value="darken">Darken Midtones</option>
+								<option value="vintage">Vintage Fade</option>
+							</select>
+							<input type="hidden" name="curves_points" id="curvesPoints" value="">
+						</div>
+
+						<!-- Selective Color (simplified: provide basic controls) -->
+						<div class="control-group">
+							<label>Selective Color Preset</label>
+							<select name="selective_color_preset" id="selectiveColorPreset">
+								<option value="">None</option>
+								<option value="warm-sky">Warm Sky</option>
+								<option value="cool-water">Cool Water</option>
+								<option value="vivid-greens">Vivid Greens</option>
+								<option value="pop-reds">Pop Reds</option>
+							</select>
+							<input type="hidden" name="selective_color" id="selectiveColorData" value="">
+						</div>
+
+						<!-- Chromatic Aberration -->
+						<div class="control-group">
+							<label>Chromatic Aberration Fix <span id="chromaticAberrationValue">0</span>px</label>
+							<input type="range" name="chromatic_aberration" id="chromatic_aberration" min="-10" max="10"
+								value="0" step="0.5">
+						</div>
+
+						<!-- Unsharp Mask -->
+						<div class="control-group">
+							<label>Unsharp Mask Amount <span id="unsharpAmountValue">0</span>%</label>
+							<input type="range" name="unsharp_amount" id="unsharp_amount" min="0" max="500" value="0">
+						</div>
+						<div class="control-group">
+							<label>Unsharp Mask Radius <span id="unsharpRadiusValue">1.0</span>px</label>
+							<input type="range" name="unsharp_radius" id="unsharp_radius" min="1" max="50" value="10">
+							<!-- Maps to 0.1-5.0: value/10 -->
+						</div>
+
+						<!-- Film Grain -->
+						<div class="control-group">
+							<label>Film Grain <span id="grainAmountValue">0</span></label>
+							<input type="range" name="grain_amount" id="grain_amount" min="0" max="100" value="0">
+						</div>
+
+						<!-- Vignette Custom -->
+						<div class="control-group">
+							<label>Vignette Amount <span id="vignetteAmountValue">0</span></label>
+							<input type="range" name="vignette_amount" id="vignette_amount" min="0" max="100" value="0">
+						</div>
+						<div class="control-group vignette-custom-options" style="display: none;">
+							<label>Vignette Feather <span id="vignetteFeatherValue">50</span></label>
+							<input type="range" name="vignette_feather" id="vignette_feather" min="0" max="100"
+								value="50">
+						</div>
+						<div class="control-group vignette-custom-options" style="display: none;">
+							<label>Vignette Roundness <span id="vignetteRoundnessValue">50</span></label>
+							<input type="range" name="vignette_roundness" id="vignette_roundness" min="0" max="100"
+								value="50">
+						</div>
+						<div class="control-group vignette-custom-options" style="display: none;">
+							<label>Vignette Midpoint <span id="vignetteMidpointValue">50</span></label>
+							<input type="range" name="vignette_midpoint" id="vignette_midpoint" min="0" max="100"
+								value="50">
+						</div>
+					</div>
+				</div>
+
+				<div class="control-group">
+					<h3>Watermark & Text</h3>
+					<div class="advanced-inputs">
+						<input type="text" id="text-overlay" name="text_overlay" placeholder="Text Overlay">
+						<!-- BUG-15 FIX: Add text color picker. Previously, the text color
 					     was never sent to the server, so text overlay always used white. -->
-					<div class="color-input-row">
-						<label for="text-color">Text Color</label>
-						<input type="color" id="text-color" name="text_color" value="#ffffff">
-					</div>
-					<div class="file-select-mini">
-						<label for="watermark-file">Watermark Image:</label>
-						<input type="file" id="watermark-file" accept="image/*">
+						<div class="color-input-row">
+							<label for="text-color">Text Color</label>
+							<input type="color" id="text-color" name="text_color" value="#ffffff">
+						</div>
+						<div class="file-select-mini">
+							<label for="watermark-file">Watermark Image:</label>
+							<input type="file" id="watermark-file" accept="image/*">
+						</div>
 					</div>
 				</div>
-			</div>
 
-			<div class="control-group">
-				<h3>Metadata & Privacy</h3>
-				<div class="metadata-controls">
-					<label><input type="checkbox" id="strip-exif" name="strip_exif" checked> Strip EXIF (Privacy)</label>
-					<!-- BUG-10 FIX: Add vignette checkbox. The Vignette option was
-					     defined in the backend but had no UI control to enable it. -->
-					<label><input type="checkbox" id="vignette" name="vignette"> Vignette Effect</label>
-					<input type="text" id="copyright" name="copyright" placeholder="Copyright/Author">
+				<div class="control-group">
+					<h3>Metadata & Privacy</h3>
+					<div class="metadata-controls">
+						<label><input type="checkbox" id="strip-exif" name="strip_exif" checked> Strip EXIF
+							(Privacy)</label>
+						<!-- BUG-10 FIX: Add vignette checkbox. The Vignette option was
+			      defined in the backend but had no UI control to enable it. -->
+						<label><input type="checkbox" id="vignette" name="vignette"> Vignette Effect</label>
+						<input type="text" id="copyright" name="copyright" placeholder="Copyright/Author">
+					</div>
 				</div>
-			</div>
 
-			<button id="process-btn" class="primary-btn">
-				<span>Process Images</span>
-				<!-- IMP-06 FIX: Loader element now has an id for JS toggling -->
-				<div id="loader" class="loader hidden"></div>
-			</button>
-		</section>
+				<!-- Background Removal -->
+				<div class="control-group">
+					<h3>Background Removal</h3>
+					<div class="metadata-controls">
+						<label><input type="checkbox" id="removeBackground" name="remove_background"> Enable Background
+							Removal</label>
+					</div>
+				</div>
+				<div class="control-group bg-removal-options" id="bgRemovalOptions" style="display: none;">
+					<label for="bgRemovalMethod">Removal Method</label>
+					<select name="bg_removal_method" id="bgRemovalMethod">
+						<option value="transparent">Auto-Detect (Corner Sampling)</option>
+						<option value="flood-fill">Flood Fill from Edges</option>
+						<option value="color-match">Match Specific Color</option>
+					</select>
+				</div>
+				<div class="control-group bg-removal-options" id="bgRemovalToleranceGroup" style="display: none;">
+					<label>Tolerance <span id="bgToleranceValue">30</span></label>
+					<input type="range" name="bg_removal_tolerance" id="bgRemovalTolerance" min="0" max="100"
+						value="30">
+				</div>
+				<div class="control-group bg-removal-options" id="bgRemovalColorGroup" style="display: none;">
+					<label>Background Color</label>
+					<input type="color" name="bg_removal_color" id="bgRemovalColor" value="#ffffff">
+				</div>
+				<div class="control-group bg-removal-options" id="bgRemovalSmoothGroup" style="display: none;">
+					<label>Edge Smoothing <span id="bgSmoothValue">2</span></label>
+					<input type="range" name="bg_removal_edge_smooth" id="bgRemovalEdgeSmooth" min="0" max="10"
+						value="2">
+				</div>
 
-		<section class="results-section hidden" id="results-container">
-			<div class="results-header">
-				<h3>Processed Files</h3>
-				<button id="download-all-btn" class="secondary-btn">Download All (ZIP)</button>
-			</div>
-			<div id="results-list" class="results-grid"></div>
-		</section>
-		<section class="developer-section">
-			<h3>Developer API</h3>
-			<div class="api-info">
-				<p>Endpoint: <code>/api/v1/process</code></p>
-				<p>Method: <code>POST</code> (Multipart Form)</p>
-				<p>API Key required in Header: <code>X-API-Key</code></p>
-			</div>
-		</section>
-	</main>
+				<!-- Branding & Overlays -->
+				<div class="section-header" onclick="toggleSection('brandingOverlays')">
+					<h3>Branding & Overlays</h3>
+					<span class="toggle-icon">▶</span>
+				</div>
+				<div id="brandingOverlays" class="collapsible-section collapsed">
+					<div class="branding-inner">
 
-	<footer>
-		<p>&copy; 2026 Image Resizer. Built with Go & Vanilla JS.</p>
-	</footer>
-</div>
+						<!-- Dynamic Text Watermark -->
+						<div class="control-group">
+							<label>Dynamic Text Watermark</label>
+							<input type="text" name="watermark_template" id="watermark_template"
+								placeholder="e.g. © {year} {filename}">
+							<small class="hint">Variables: {filename}, {date}, {time}, {year}, {camera}, {width},
+								{height}</small>
+						</div>
 
-<script src="/static/js/app.js"></script>
+						<!-- Watermark Options -->
+						<div class="control-group">
+							<label>Watermark Opacity <span id="watermarkOpacityValue">50</span>%</label>
+							<input type="range" name="watermark_opacity" id="watermark_opacity" min="0" max="100"
+								value="50">
+						</div>
+						<div class="control-group">
+							<label><input type="checkbox" name="watermark_tile" id="watermark_tile"> Tile
+								Watermark</label>
+						</div>
+						<div class="control-group branding-tile-options" style="display: none;">
+							<label>Tile Spacing <span id="watermarkTileSpacingValue">50</span>px</label>
+							<input type="range" name="watermark_tile_spacing" id="watermark_tile_spacing" min="10"
+								max="200" value="50">
+						</div>
+
+						<!-- QR Code -->
+						<div class="control-group">
+							<label>QR Code Text/URL</label>
+							<input type="text" name="qr_code_text" id="qr_code_text" placeholder="https://example.com">
+						</div>
+						<div class="control-group qr-code-options" style="display: none;">
+							<label>QR Code Size <span id="qrCodeSizeValue">128</span>px</label>
+							<input type="range" name="qr_code_size" id="qr_code_size" min="64" max="512" value="128"
+								step="16">
+						</div>
+						<div class="control-group qr-code-options" style="display: none;">
+							<label>QR Code Position</label>
+							<select name="qr_code_position" id="qr_code_position">
+								<option value="bottom-right">Bottom Right</option>
+								<option value="bottom-left">Bottom Left</option>
+								<option value="top-right">Top Right</option>
+								<option value="top-left">Top Left</option>
+							</select>
+						</div>
+
+						<!-- Barcode -->
+						<div class="control-group">
+							<label>Barcode Text</label>
+							<input type="text" name="barcode_text" id="barcode_text" placeholder="Enter barcode text">
+						</div>
+						<div class="control-group barcode-options" style="display: none;">
+							<label>Barcode Type</label>
+							<select name="barcode_type" id="barcode_type">
+								<option value="code128">Code 128</option>
+								<option value="ean13">EAN-13</option>
+							</select>
+						</div>
+
+						<!-- Rounded Corners -->
+						<div class="control-group">
+							<label>Rounded Corners <span id="roundedCornersValue">0</span>px</label>
+							<input type="range" name="rounded_corners" id="rounded_corners" min="0" max="100" value="0">
+						</div>
+
+						<!-- Drop Shadow -->
+						<div class="control-group">
+							<label>Drop Shadow Offset <span id="dropShadowOffsetValue">0</span>px</label>
+							<input type="range" name="drop_shadow_offset" id="drop_shadow_offset" min="0" max="30"
+								value="0">
+						</div>
+						<div class="control-group shadow-options" style="display: none;">
+							<label>Shadow Blur <span id="dropShadowBlurValue">5.0</span></label>
+							<input type="range" name="drop_shadow_blur" id="drop_shadow_blur" min="1" max="20"
+								value="10">
+							<!-- Maps to 0.1-2.0: value/10 -->
+						</div>
+						<div class="control-group shadow-options" style="display: none;">
+							<div class="color-input-row">
+								<label for="drop_shadow_color">Shadow Color</label>
+								<input type="color" name="drop_shadow_color" id="drop_shadow_color" value="#000000">
+							</div>
+						</div>
+
+						<!-- Border -->
+						<div class="control-group">
+							<label>Border Width <span id="borderWidthValue">0</span>px</label>
+							<input type="range" name="border_width" id="border_width" min="0" max="50" value="0">
+						</div>
+						<div class="control-group border-options" style="display: none;">
+							<div class="color-input-row">
+								<label for="border_color">Border Color</label>
+								<input type="color" name="border_color" id="border_color" value="#000000">
+							</div>
+						</div>
+						<div class="control-group border-options" style="display: none;">
+							<label>Border Style</label>
+							<select name="border_style" id="border_style">
+								<option value="solid">Solid</option>
+								<option value="dashed">Dashed</option>
+							</select>
+						</div>
+
+						<!-- Placeholder Generator -->
+						<div class="control-group">
+							<label>Placeholder Generator</label>
+							<div class="dimension-fields">
+								<div>
+									<input type="number" name="placeholder_width" id="placeholder_width"
+										placeholder="Width" min="1">
+								</div>
+								<div>
+									<input type="number" name="placeholder_height" id="placeholder_height"
+										placeholder="Height" min="1">
+								</div>
+							</div>
+							<small class="hint" id="placeholder-note" style="display: none;">No input image needed —
+								generates a placeholder directly</small>
+						</div>
+						<div class="control-group placeholder-options" style="display: none;">
+							<label>Placeholder Text</label>
+							<input type="text" name="placeholder_text" id="placeholder_text" placeholder="Auto: WxH">
+						</div>
+						<div class="control-group placeholder-options" style="display: none;">
+							<div class="color-input-row">
+								<label for="placeholder_bg_color">Background</label>
+								<input type="color" name="placeholder_bg_color" id="placeholder_bg_color"
+									value="#cccccc">
+							</div>
+						</div>
+						<div class="control-group placeholder-options" style="display: none;">
+							<div class="color-input-row">
+								<label for="placeholder_text_color">Text Color</label>
+								<input type="color" name="placeholder_text_color" id="placeholder_text_color"
+									value="#666666">
+							</div>
+						</div>
+
+						<!-- Steganography -->
+						<div class="control-group">
+							<label>Hidden Message (Steganography)</label>
+							<input type="text" name="steganography_text" id="steganography_text"
+								placeholder="Invisible text encoded in pixels">
+						</div>
+
+						<!-- Signature Stamp -->
+						<div class="control-group">
+							<label>Signature Stamp</label>
+							<div class="file-select-mini">
+								<label for="signature-file">Signature Image:</label>
+								<input type="file" id="signature-file" accept="image/*">
+							</div>
+						</div>
+						<div class="control-group signature-options" style="display: none;">
+							<label>Signature Position</label>
+							<select name="signature_position" id="signature_position">
+								<option value="bottom-right">Bottom Right</option>
+								<option value="bottom-left">Bottom Left</option>
+								<option value="top-right">Top Right</option>
+								<option value="top-left">Top Left</option>
+							</select>
+						</div>
+						<div class="control-group signature-options" style="display: none;">
+							<label>Signature Opacity <span id="signatureOpacityValue">80</span>%</label>
+							<input type="range" name="signature_opacity" id="signature_opacity" min="0" max="100"
+								value="80">
+						</div>
+						<div class="control-group signature-options" style="display: none;">
+							<label>Signature Scale <span id="signatureScaleValue">1.0</span>x</label>
+							<input type="range" name="signature_scale" id="signature_scale" min="1" max="20" value="10">
+							<!-- Maps to 0.1-2.0: value/10 -->
+						</div>
+
+					</div>
+				</div>
+
+				<!-- Social Media Tools -->
+				<div class="section-header" onclick="toggleSection('socialMediaTools')">
+					<h3>Social Media Tools</h3>
+					<span class="toggle-icon">▶</span>
+				</div>
+				<div id="socialMediaTools" class="collapsible-section collapsed">
+					<div class="social-media-inner">
+
+						<!-- Carousel Slicer -->
+						<div class="control-group">
+							<label><input type="checkbox" name="carousel_slice" id="carousel_slice"> Enable Carousel
+								Slicer</label>
+						</div>
+						<div class="control-group carousel-options" style="display: none;">
+							<div class="dimension-fields">
+								<div>
+									<label>Slide Width</label>
+									<input type="number" name="carousel_slice_width" id="carousel_slice_width"
+										value="1080" min="1">
+								</div>
+								<div>
+									<label>Slide Height</label>
+									<input type="number" name="carousel_slice_height" id="carousel_slice_height"
+										value="1350" min="1">
+								</div>
+							</div>
+							<small class="hint">Splits wide images into multiple Instagram carousel slides</small>
+						</div>
+
+						<!-- Safe Zone Overlay -->
+						<div class="control-group">
+							<label><input type="checkbox" name="safe_zone_overlay" id="safe_zone_overlay"> Show Safe
+								Zone Guides</label>
+						</div>
+						<div class="control-group safe-zone-options" style="display: none;">
+							<label for="safe_zone_platform">Platform</label>
+							<select name="safe_zone_platform" id="safe_zone_platform">
+								<option value="youtube">YouTube</option>
+								<option value="twitter">Twitter/X</option>
+								<option value="linkedin">LinkedIn</option>
+							</select>
+							<small class="hint">Draws semi-transparent guides showing safe text areas</small>
+						</div>
+
+						<!-- File Size Optimizer -->
+						<div class="control-group">
+							<label>Max File Size (KB)</label>
+							<input type="number" name="max_file_size_kb" id="max_file_size_kb" value="0" min="0"
+								placeholder="0 = no limit">
+							<small class="hint">For Discord/Slack emoji: set to 256</small>
+						</div>
+
+						<!-- Device Mockup -->
+						<div class="control-group">
+							<label>Device Frame Mockup</label>
+							<div class="file-select-mini">
+								<label for="device-frame-file">Device Frame PNG:</label>
+								<input type="file" id="device-frame-file" name="device_frame" accept="image/png">
+							</div>
+							<small class="hint">Upload a device frame PNG with transparent screen area</small>
+						</div>
+
+						<!-- Image Stitch -->
+						<div class="control-group">
+							<label><input type="checkbox" name="stitch_images" id="stitch_images"> Stitch Images</label>
+						</div>
+						<div class="control-group stitch-options" style="display: none;">
+							<label for="stitch_direction">Direction</label>
+							<select name="stitch_direction" id="stitch_direction">
+								<option value="vertical">Vertical (Pinterest)</option>
+								<option value="horizontal">Horizontal</option>
+							</select>
+							<small class="hint">Stitches multiple uploaded images into one long image</small>
+						</div>
+
+						<!-- Favicon Generator -->
+						<div class="control-group">
+							<label><input type="checkbox" name="favicon_generate" id="favicon_generate"> Generate
+								Favicon Pack</label>
+						</div>
+						<div class="control-group favicon-options" style="display: none;">
+							<label for="favicon_sizes">Sizes</label>
+							<input type="text" name="favicon_sizes" id="favicon_sizes"
+								value="16,32,48,64,128,180,192,256,384,512" placeholder="Comma-separated sizes">
+							<small class="hint">Generates all favicon sizes + manifest.json for PWA</small>
+						</div>
+
+						<!-- Twitch Panel -->
+						<div class="control-group">
+							<label>Twitch Panel Size</label>
+							<div class="dimension-fields">
+								<div>
+									<input type="number" name="twitch_panel_width" id="twitch_panel_width" value="320"
+										min="1" placeholder="Width">
+								</div>
+								<div>
+									<input type="number" name="twitch_panel_height" id="twitch_panel_height" value="160"
+										min="1" placeholder="Height">
+								</div>
+							</div>
+						</div>
+
+					</div>
+				</div>
+
+				<!-- Format & Encoding Options -->
+				<div class="section-header" onclick="toggleSection('formatEncoding')">
+					<h3>Format & Encoding Options</h3>
+					<span class="toggle-icon">▶</span>
+				</div>
+				<div id="formatEncoding" class="collapsible-section collapsed">
+					<div class="format-encoding-inner">
+
+						<!-- Progressive JPEG (only for JPEG output) -->
+						<div class="control-group format-option" data-format="jpeg">
+							<label class="toggle-label">
+								<input type="checkbox" name="progressive_jpeg" id="progressive_jpeg">
+								<span>Progressive JPEG</span>
+							</label>
+							<small class="option-hint">Encode as progressive JPEG for faster perceived loading (note:
+								standard encoder used currently)</small>
+						</div>
+
+						<!-- Lossless WebP (only for WebP output) -->
+						<div class="control-group format-option" data-format="webp">
+							<label class="toggle-label">
+								<input type="checkbox" name="lossless_webp" id="lossless_webp">
+								<span>Lossless WebP</span>
+							</label>
+							<small class="option-hint">Encode WebP in lossless mode for perfect quality at larger file
+								size</small>
+						</div>
+
+						<!-- Base64 Output -->
+						<div class="control-group">
+							<label class="toggle-label">
+								<input type="checkbox" name="base64_output" id="base64_output">
+								<span>Base64 Output</span>
+							</label>
+							<small class="option-hint">Return base64-encoded data URI instead of file download (JSON
+								response)</small>
+						</div>
+
+						<!-- ICO Multi-size -->
+						<div class="control-group format-option" data-format="ico">
+							<label for="ico_sizes">ICO Multi-size Bundler</label>
+							<input type="text" id="ico_sizes" name="ico_sizes" placeholder="16,32,48,64,128,256"
+								value="">
+							<small class="option-hint">Comma-separated sizes for multi-size ICO file (leave empty for
+								single size)</small>
+						</div>
+
+						<!-- HDR Tone Mapping -->
+						<div class="control-group">
+							<label class="toggle-label">
+								<input type="checkbox" name="tone_map_hdr" id="tone_map_hdr">
+								<span>HDR → SDR Tone Mapping</span>
+							</label>
+							<small class="option-hint">Apply Reinhard tone mapping to compress HDR highlights into
+								displayable range</small>
+						</div>
+
+						<!-- SVG Scale -->
+						<div class="control-group format-option" data-format="svg-input">
+							<label for="svg_scale">SVG Rasterization Scale</label>
+							<input type="number" id="svg_scale" name="svg_scale" value="1.0" min="0.1" max="10.0"
+								step="0.5">
+							<small class="option-hint">Scale factor for SVG input files (default 1.0 = native
+								size)</small>
+						</div>
+
+						<!-- TIFF Multi-page -->
+						<div class="control-group format-option" data-format="tiff-input">
+							<label class="toggle-label">
+								<input type="checkbox" name="tiff_extract_pages" id="tiff_extract_pages">
+								<span>TIFF Multi-page Extraction</span>
+							</label>
+							<small class="option-hint">Extract all pages from multi-page TIFF (currently single-page
+								only)</small>
+						</div>
+
+						<!-- PDF Page -->
+						<div class="control-group format-option" data-format="pdf-input">
+							<label for="pdf_page">PDF Page Number</label>
+							<input type="number" id="pdf_page" name="pdf_page" value="0" min="0" step="1">
+							<small class="option-hint">Specific PDF page to extract (0 = all pages, requires external
+								tools)</small>
+						</div>
+
+					</div>
+				</div>
+
+				<!-- Privacy & Security -->
+				<div class="section-header" onclick="toggleSection('privacySecurity')">
+					<h3>🔒 Privacy & Security</h3>
+					<span class="toggle-icon">▶</span>
+				</div>
+				<div id="privacySecurity" class="collapsible-section collapsed">
+					<div class="privacy-inner">
+						<!-- Zero-Log Mode -->
+						<div class="control-group">
+							<label>Zero-Log Mode</label>
+							<div class="toggle-wrapper">
+								<input type="checkbox" id="zeroLogMode" name="zero_log_mode">
+								<label for="zeroLogMode" class="toggle-label">Enable</label>
+							</div>
+							<p class="option-hint">Process in memory only — no files written to server disk</p>
+						</div>
+
+						<!-- Encrypted Output -->
+						<div class="control-group">
+							<label>Encrypt Output</label>
+							<div class="toggle-wrapper">
+								<input type="checkbox" id="encryptOutput" name="encrypt_output">
+								<label for="encryptOutput" class="toggle-label">Enable</label>
+							</div>
+						</div>
+						<div class="control-group encryption-options" id="encryptionOptions" style="display: none;">
+							<label>Encryption Password</label>
+							<input type="password" name="encryption_password" id="encryptionPassword"
+								placeholder="Enter password...">
+							<p class="option-hint">AES-256-GCM encryption — keep this password safe!</p>
+						</div>
+
+						<!-- Private Link (shown after processing) -->
+						<div class="control-group" id="privateLinkGroup" style="display: none;">
+							<label>Private Download Link</label>
+							<div class="private-link-wrapper">
+								<input type="text" id="privateLinkUrl" readonly placeholder="Process an image first...">
+								<button type="button" id="copyPrivateLink" class="btn-small">Copy</button>
+							</div>
+							<p class="option-hint">Self-destructing link — expires in 24 hours</p>
+						</div>
+					</div>
+				</div>
+
+				<button id="process-btn" class="primary-btn">
+					<span>Process Images</span>
+					<!-- IMP-06 FIX: Loader element now has an id for JS toggling -->
+					<div id="loader" class="loader hidden"></div>
+				</button>
+			</section>
+
+			<section class="results-section hidden" id="results-container">
+				<div class="results-header">
+					<h3>Processed Files</h3>
+					<button id="download-all-btn" class="secondary-btn">Download All (ZIP)</button>
+				</div>
+				<div id="results-list" class="results-grid"></div>
+			</section>
+			<section class="developer-section">
+				<h3>Developer API</h3>
+				<div class="api-info">
+					<p>Endpoint: <code>/api/v1/process</code></p>
+					<p>Method: <code>POST</code> (Multipart Form)</p>
+					<p>API Key required in Header: <code>X-API-Key</code></p>
+				</div>
+			</section>
+		</main>
+
+		<footer>
+			<p>&copy; 2026 Image Resizer. Built with Go & Vanilla JS.</p>
+		</footer>
+	</div>
+
+	<script src="/static/js/app.js"></script>
 </body>
+
 </html>

@@ -6,6 +6,15 @@ WORKDIR /app
 # Install build dependencies
 RUN apk add --no-cache gcc musl-dev
 
+# Optional: Uncomment for AVIF support (requires CGO + libaom)
+# RUN apk add --no-cache libaom-dev aom-utils
+
+# Optional: Uncomment for HEIC/HEIF support (requires CGO + libheif)
+# RUN apk add --no-cache libheif-dev libheif-tools
+
+# Optional: Uncomment for RAW camera file support (requires CGO + libraw)
+# RUN apk add --no-cache libraw-dev libraw-tools
+
 # Copy module files
 COPY go.mod go.sum ./
 RUN go mod download
