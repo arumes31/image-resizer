@@ -64,9 +64,20 @@ graph TD
 
 ### 📦 Run with Docker
 ```bash
-docker pull ghcr.io/arumes31/image-resizer:latest
-docker run -p 5000:5000 ghcr.io/arumes31/image-resizer:latest
+docker pull ghcr.io/arumes31/image-resizer@sha256:<reviewed-digest>
+docker run --read-only --tmpfs /tmp \
+  --tmpfs /app/static/uploads:rw,uid=10001,gid=10001,mode=0750 \
+  --tmpfs /app/static/processed:rw,uid=10001,gid=10001,mode=0750 \
+  -e API_KEY="$(openssl rand -hex 32)" \
+  -p 5000:5000 \
+  ghcr.io/arumes31/image-resizer@sha256:<reviewed-digest>
 ```
+
+Production images fail closed unless `API_KEY` is set to a non-default value.
+Use an immutable reviewed digest in deployments; release tags are discovery
+labels and may move as updates are published. Persist processed files only when
+needed, using narrowly scoped writable volumes for `/app/static/uploads` and
+`/app/static/processed`.
 
 ### 🔨 Development Mode
 ```bash
@@ -81,7 +92,8 @@ Open `http://localhost:5000` to access the dashboard.
 The suite includes a secure REST API for headless automation.
 
 **Authentication:**
-All API endpoints (except `/api/v1/status`) require an API key passed via the HTTP headers.
+All `/api/v1` endpoints require an API key passed via the HTTP headers. The
+minimal unauthenticated container health endpoint is `GET /healthz`.
 - **Header:** `X-API-Key`
 - **Value:** Your configured secure key.
 
@@ -163,7 +175,8 @@ Returned for invalid form data or unallowed file extensions.
 
 ## 🔒 Security & Privacy
 - **Privacy:** One-click EXIF stripping removes metadata (GPS, Timestamps).
-- **Safety:** Constant-time comparison for API keys; 500% scaling cap to prevent memory exhaustion (enforced in `handleUpload` in `internal/server/server.go`).
+- **Safety:** Constant-time API-key comparison; requests are limited to 16 MiB and 20 files, while decoded and generated images are limited to 12,000 pixels per side and 40 megapixels to prevent decompression and resize allocation attacks.
+- **Container:** The runtime uses an immutable Alpine base, an unprivileged numeric user, exact system packages, and a health check. CI produces provenance and an SBOM and blocks high/critical image vulnerabilities.
 - **Audited:** Scanned with `gosec` and `govulncheck` on every commit.
 
 ---

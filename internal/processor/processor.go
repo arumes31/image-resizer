@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -15,10 +16,11 @@ import (
 
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
-	"github.com/golang/freetype"
 	"github.com/jung-kurt/gofpdf"
 	"github.com/sergeymakinen/go-ico"
 	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
+	"golang.org/x/image/math/fixed"
 )
 
 type ResizeMethod string
@@ -28,6 +30,12 @@ const (
 	Bilinear ResizeMethod = "bilinear"
 	Bicubic  ResizeMethod = "bicubic"
 	Lanczos  ResizeMethod = "lanczos"
+
+	// MaxImageDimension and MaxImagePixels bound decoded and generated images.
+	// These limits prevent small compressed uploads from causing excessive
+	// allocations during decoding or resizing.
+	MaxImageDimension = 12_000
+	MaxImagePixels    = int64(40_000_000)
 )
 
 var ResizeMethods = map[string]imaging.ResampleFilter{
@@ -90,6 +98,35 @@ type ProcessOptions struct {
 func IsAllowedImageFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return AllowedExtensions[ext]
+}
+
+func validateDimensions(width, height int) error {
+	if width < 1 || height < 1 {
+		return fmt.Errorf("image dimensions must be positive")
+	}
+	if width > MaxImageDimension || height > MaxImageDimension {
+		return fmt.Errorf("image dimensions %dx%d exceed the %d pixel side limit", width, height, MaxImageDimension)
+	}
+	if int64(width)*int64(height) > MaxImagePixels {
+		return fmt.Errorf("image dimensions %dx%d exceed the %d pixel area limit", width, height, MaxImagePixels)
+	}
+	return nil
+}
+
+func validateImageFile(path string) error {
+	file, err := os.Open(filepath.Clean(path)) // #nosec G304 -- caller supplies an application-owned path.
+	if err != nil {
+		return fmt.Errorf("open image header: %w", err)
+	}
+	imageConfig, _, err := image.DecodeConfig(file)
+	closeErr := file.Close()
+	if err != nil {
+		return fmt.Errorf("decode image header: %w", errors.Join(err, closeErr))
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close image header: %w", closeErr)
+	}
+	return validateDimensions(imageConfig.Width, imageConfig.Height)
 }
 
 func getPlatformFontPath() string {
@@ -169,7 +206,7 @@ func applyVignette(img image.Image) image.Image {
 			dy := float64(y) - cy
 			dist := math.Sqrt(dx*dx + dy*dy)
 			// Vignette strength: 0 at center, up to ~0.7 at corners
-			factor := 1.0 - 0.7*math.Pow(dist/maxDist, 2)
+			factor := 1.0 - 0.7*(dist/maxDist)*(dist/maxDist)
 			if factor < 0 {
 				factor = 0
 			}
@@ -188,6 +225,7 @@ func applyVignette(img image.Image) image.Image {
 
 // hexColorRegex validates #RRGGBB hex color strings.
 var hexColorRegex = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+var unsafeFilenameRegex = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 
 // parseHexColor parses a #RRGGBB hex color string into r, g, b uint8 values.
 // BUG-09 FIX: Previously used fmt.Sscanf which silently ignored parse errors,
@@ -210,7 +248,83 @@ func parseHexColor(hexStr string) (r, g, b uint8) {
 	return
 }
 
+func normalizeOutputFormat(requestedFormat, sourcePath string) (string, error) {
+	extension := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(requestedFormat)), ".")
+	if extension == "" {
+		extension = strings.TrimPrefix(strings.ToLower(filepath.Ext(sourcePath)), ".")
+	}
+	if extension == "pdf" {
+		return "jpg", nil
+	}
+	if !AllowedExtensions["."+extension] {
+		return "", fmt.Errorf("unsupported output format %q", requestedFormat)
+	}
+	return extension, nil
+}
+
+func sanitizeOutputBase(template, originalName string) string {
+	candidate := strings.ReplaceAll(template, "{name}", originalName)
+	candidate = strings.ReplaceAll(candidate, "\\", "/")
+	candidate = filepath.Base(candidate)
+	candidate = strings.TrimSuffix(candidate, filepath.Ext(candidate))
+	candidate = unsafeFilenameRegex.ReplaceAllString(candidate, "_")
+	candidate = strings.Trim(candidate, "._-")
+	if candidate == "" {
+		candidate = unsafeFilenameRegex.ReplaceAllString(originalName, "_")
+	}
+	if len(candidate) > 100 {
+		candidate = candidate[:100]
+	}
+	return candidate
+}
+
+func drawTrueTypeText(
+	dst draw.Image,
+	fontPath string,
+	text string,
+	fontSize float64,
+	foreground image.Image,
+	x int,
+	y int,
+) error {
+	fontBytes, err := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304 -- path is operator-controlled.
+	if err != nil {
+		return fmt.Errorf("load font: %w", err)
+	}
+
+	parsedFont, err := opentype.Parse(fontBytes)
+	if err != nil {
+		return fmt.Errorf("parse font: %w", err)
+	}
+	face, err := opentype.NewFace(parsedFont, &opentype.FaceOptions{
+		Size:    fontSize,
+		DPI:     72,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		return fmt.Errorf("create font face: %w", err)
+	}
+	drawer := font.Drawer{
+		Dst:  dst,
+		Src:  foreground,
+		Face: face,
+		Dot:  fixed.P(x, y),
+	}
+	drawer.DrawString(text)
+	if err := face.Close(); err != nil {
+		return fmt.Errorf("close font face: %w", err)
+	}
+	return nil
+}
+
 func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("process options are required")
+	}
+	if err := validateImageFile(srcPath); err != nil {
+		return nil, fmt.Errorf("validate source image: %w", err)
+	}
+
 	img, err := imaging.Open(srcPath, imaging.AutoOrientation(true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open image: %w", err)
@@ -364,13 +478,8 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		newHeight = origHeight
 	}
 
-	// BUG-02 FIX: Ensure dimensions are at least 1px to prevent
-	// zero-size image generation which causes errors or blank output.
-	if newWidth < 1 {
-		newWidth = 1
-	}
-	if newHeight < 1 {
-		newHeight = 1
+	if dimensionErr := validateDimensions(newWidth, newHeight); dimensionErr != nil {
+		return nil, fmt.Errorf("invalid output dimensions: %w", dimensionErr)
 	}
 
 	resampleFilter := imaging.Lanczos
@@ -389,12 +498,14 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 
 	// 7. Watermarking
 	if opts.WatermarkPath != "" {
-		wm, wErr := imaging.Open(opts.WatermarkPath)
-		if wErr == nil {
-			resizedImg = imaging.OverlayCenter(resizedImg, wm, 0.5)
-		} else {
-			fmt.Printf("Warning: failed to open watermark %s: %v\n", opts.WatermarkPath, wErr)
+		if validationErr := validateImageFile(opts.WatermarkPath); validationErr != nil {
+			return nil, fmt.Errorf("validate watermark: %w", validationErr)
 		}
+		wm, watermarkErr := imaging.Open(opts.WatermarkPath)
+		if watermarkErr != nil {
+			return nil, fmt.Errorf("open watermark: %w", watermarkErr)
+		}
+		resizedImg = imaging.OverlayCenter(resizedImg, wm, 0.5)
 	}
 
 	// 8. Text Overlay
@@ -408,38 +519,24 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 
 		if fontPath != "" {
-			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
-			if fErr == nil {
-				f, pErr := freetype.ParseFont(fontBytes)
-				if pErr == nil {
-					// BUG-09 FIX: Use validated color parsing with fallback
-					r, g, b := parseHexColor(opts.TextColor)
-					fg := image.NewUniform(color.RGBA{r, g, b, 255})
-
-					c := freetype.NewContext()
-					c.SetDPI(72)
-					c.SetFont(f)
-					size := opts.TextSize
-					if size == 0 {
-						size = 24
-					}
-					c.SetFontSize(size)
-					c.SetClip(dst.Bounds())
-					c.SetDst(dst)
-					c.SetSrc(fg)
-					c.SetHinting(font.HintingFull)
-
-					pt := freetype.Pt(10, dst.Bounds().Dy()-10)
-					if _, dErr := c.DrawString(opts.TextOverlay, pt); dErr != nil {
-						fmt.Printf("Warning: failed to draw text overlay: %v\n", dErr)
-					}
-					resizedImg = dst
-				} else {
-					fmt.Printf("Warning: failed to parse font: %v\n", pErr)
-				}
-			} else {
-				fmt.Printf("Warning: failed to load font at %s: %v\n", fontPath, fErr)
+			// BUG-09 FIX: Use validated color parsing with fallback.
+			r, g, b := parseHexColor(opts.TextColor)
+			fontSize := opts.TextSize
+			if fontSize == 0 {
+				fontSize = 24
 			}
+			if drawErr := drawTrueTypeText(
+				dst,
+				fontPath,
+				opts.TextOverlay,
+				fontSize,
+				image.NewUniform(color.RGBA{r, g, b, 255}),
+				10,
+				dst.Bounds().Dy()-10,
+			); drawErr != nil {
+				fmt.Printf("Warning: failed to draw text overlay: %v\n", drawErr)
+			}
+			resizedImg = dst
 		} else {
 			fmt.Println("Warning: No suitable font found for text overlay")
 		}
@@ -457,52 +554,44 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 
 		if fontPath != "" {
-			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
-			if fErr == nil {
-				f, pErr := freetype.ParseFont(fontBytes)
-				if pErr == nil {
-					fg := image.NewUniform(color.RGBA{200, 200, 200, 180})
-					c := freetype.NewContext()
-					c.SetDPI(72)
-					c.SetFont(f)
-					c.SetFontSize(12)
-					c.SetClip(dst.Bounds())
-					c.SetDst(dst)
-					c.SetSrc(fg)
-					c.SetHinting(font.HintingFull)
-
-					// Position at bottom-right with padding
-					textWidth := len(opts.Copyright) * 7 // approximate width
-					xPos := dst.Bounds().Dx() - textWidth - 10
-					if xPos < 10 {
-						xPos = 10
-					}
-					pt := freetype.Pt(xPos, dst.Bounds().Dy()-10)
-					if _, dErr := c.DrawString("© "+opts.Copyright, pt); dErr != nil {
-						fmt.Printf("Warning: failed to draw copyright: %v\n", dErr)
-					}
-					resizedImg = dst
-				}
+			// Position at bottom-right with padding.
+			textWidth := len(opts.Copyright) * 7 // approximate width
+			xPos := dst.Bounds().Dx() - textWidth - 10
+			if xPos < 10 {
+				xPos = 10
 			}
+			if drawErr := drawTrueTypeText(
+				dst,
+				fontPath,
+				"© "+opts.Copyright,
+				12,
+				image.NewUniform(color.RGBA{200, 200, 200, 180}),
+				xPos,
+				dst.Bounds().Dy()-10,
+			); drawErr != nil {
+				fmt.Printf("Warning: failed to draw copyright: %v\n", drawErr)
+			}
+			resizedImg = dst
 		}
 	}
 
 	fileName := filepath.Base(srcPath)
 	origNameNoExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
-	ext := strings.ToLower(opts.Format)
-	if ext == "" || ext == "pdf" {
-		ext = "jpg" // PDF intermediate is JPG
+	ext, err := normalizeOutputFormat(opts.Format, srcPath)
+	if err != nil {
+		return nil, err
 	}
 
 	// BUG-07 FIX: Add timestamp suffix to prevent filename collisions
 	// when multiple users upload files with the same name concurrently.
 	processedFileName := ""
 	if opts.RenameTemplate != "" {
-		processedFileName = strings.ReplaceAll(opts.RenameTemplate, "{name}", origNameNoExt)
-		processedFileName = fmt.Sprintf("%s_%d.%s", processedFileName, time.Now().UnixMilli(), ext)
+		baseName := sanitizeOutputBase(opts.RenameTemplate, origNameNoExt)
+		processedFileName = fmt.Sprintf("%s_%d.%s", baseName, time.Now().UnixNano(), ext)
 	} else {
-		processedFileName = fmt.Sprintf("processed_%s_%d.%s", origNameNoExt, time.Now().UnixMilli(), ext)
+		baseName := sanitizeOutputBase(origNameNoExt, "image")
+		processedFileName = fmt.Sprintf("processed_%s_%d.%s", baseName, time.Now().UnixNano(), ext)
 	}
 
 	destPath := filepath.Join(destDir, processedFileName)
@@ -521,24 +610,30 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		if cErr != nil {
 			return nil, fmt.Errorf("failed to create webp file: %w", cErr)
 		}
-		defer out.Close()
 		var webpOpts *webp.Options
 		if opts.Quality > 0 {
 			webpOpts = &webp.Options{Lossless: false, Quality: float32(opts.Quality)}
 		}
 		eErr := webp.Encode(out, resizedImg, webpOpts)
+		closeErr := out.Close()
 		if eErr != nil {
-			return nil, fmt.Errorf("failed to save webp image: %w", eErr)
+			return nil, fmt.Errorf("failed to save webp image: %w", errors.Join(eErr, closeErr))
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("failed to close webp image: %w", closeErr)
 		}
 	case "ico":
 		out, cErr := os.Create(filepath.Clean(destPath)) // #nosec G304
 		if cErr != nil {
 			return nil, fmt.Errorf("failed to create ico file: %w", cErr)
 		}
-		defer out.Close()
 		eErr := ico.Encode(out, resizedImg)
+		closeErr := out.Close()
 		if eErr != nil {
-			return nil, fmt.Errorf("failed to save ico image: %w", eErr)
+			return nil, fmt.Errorf("failed to save ico image: %w", errors.Join(eErr, closeErr))
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("failed to close ico image: %w", closeErr)
 		}
 	default:
 		sErr := imaging.Save(resizedImg, destPath, saveOpts...)
