@@ -331,13 +331,13 @@ func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open parent directory: %w", err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 
 	file, err := root.Open(filepath.Base(cleanPath))
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	contents, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {

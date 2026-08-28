@@ -149,14 +149,14 @@ func (s *Server) handleDownload(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "Unable to access processed files")
 		return
 	}
-	defer processedRoot.Close()
+	defer func() { _ = processedRoot.Close() }()
 
 	file, err := processedRoot.Open(filename)
 	if err != nil {
 		c.String(http.StatusNotFound, "File not found")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
 		c.String(http.StatusNotFound, "File not found")
