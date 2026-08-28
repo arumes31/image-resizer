@@ -46,11 +46,17 @@ func createArchive(processedFolder string, fileList []string, zipPath string) (r
 	defer func() {
 		returnErr = errors.Join(returnErr, archive.Close())
 	}()
+	processedRoot, err := os.OpenRoot(processedFolder)
+	if err != nil {
+		return fmt.Errorf("open processed directory: %w", err)
+	}
+	defer func() {
+		returnErr = errors.Join(returnErr, processedRoot.Close())
+	}()
 
 	for _, name := range fileList {
 		safeName := safeFilename(name)
-		filePath := filepath.Join(processedFolder, safeName)
-		file, openErr := os.Open(filepath.Clean(filePath))
+		file, openErr := processedRoot.Open(safeName)
 		if openErr != nil {
 			continue
 		}
@@ -138,15 +144,27 @@ func (s *Server) handleIndex(c *gin.Context) {
 // proper Content-Disposition header.
 func (s *Server) handleDownload(c *gin.Context) {
 	filename := safeFilename(c.Param("filename"))
-	filePath := filepath.Join(s.cfg.ProcessedFolder, filename)
+	processedRoot, err := os.OpenRoot(s.cfg.ProcessedFolder)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Unable to access processed files")
+		return
+	}
+	defer processedRoot.Close()
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	file, err := processedRoot.Open(filename)
+	if err != nil {
+		c.String(http.StatusNotFound, "File not found")
+		return
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
 		c.String(http.StatusNotFound, "File not found")
 		return
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	c.File(filePath)
+	http.ServeContent(c.Writer, c.Request, filename, info.ModTime(), file)
 }
 
 func (s *Server) handleDownloadAll(c *gin.Context) {

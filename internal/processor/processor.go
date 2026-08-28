@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -36,6 +37,7 @@ const (
 	// allocations during decoding or resizing.
 	MaxImageDimension = 12_000
 	MaxImagePixels    = int64(40_000_000)
+	maxFontBytes      = int64(16 << 20)
 )
 
 var ResizeMethods = map[string]imaging.ResampleFilter{
@@ -287,7 +289,7 @@ func drawTrueTypeText(
 	x int,
 	y int,
 ) error {
-	fontBytes, err := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304 -- path is operator-controlled.
+	fontBytes, err := readBoundedFile(fontPath, maxFontBytes)
 	if err != nil {
 		return fmt.Errorf("load font: %w", err)
 	}
@@ -315,6 +317,36 @@ func drawTrueTypeText(
 		return fmt.Errorf("close font face: %w", err)
 	}
 	return nil
+}
+
+// readBoundedFile opens only the named file within its parent directory. Using
+// os.Root prevents a replaced symlink from escaping that directory between path
+// validation and open, while the size limit bounds memory used by font parsing.
+func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
+	if maxBytes < 1 {
+		return nil, fmt.Errorf("maximum file size must be positive")
+	}
+	cleanPath := filepath.Clean(path)
+	root, err := os.OpenRoot(filepath.Dir(cleanPath))
+	if err != nil {
+		return nil, fmt.Errorf("open parent directory: %w", err)
+	}
+	defer root.Close()
+
+	file, err := root.Open(filepath.Base(cleanPath))
+	if err != nil {
+		return nil, fmt.Errorf("open file: %w", err)
+	}
+	defer file.Close()
+
+	contents, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	if int64(len(contents)) > maxBytes {
+		return nil, fmt.Errorf("file exceeds %d-byte limit", maxBytes)
+	}
+	return contents, nil
 }
 
 func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult, error) {

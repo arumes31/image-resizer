@@ -54,6 +54,35 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
+func TestDownloadServesOnlyRegularFilesInsideProcessedDirectory(t *testing.T) {
+	server := newTestServer(t, 1024)
+	processedFile := filepath.Join(server.cfg.ProcessedFolder, "result.png")
+	if err := os.WriteFile(processedFile, []byte("processed"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	response := httptest.NewRecorder()
+	server.router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/download/result.png", http.NoBody))
+	if response.Code != http.StatusOK || response.Body.String() != "processed" {
+		t.Fatalf("download status=%d body=%q", response.Code, response.Body.String())
+	}
+
+	outsideFile := filepath.Join(t.TempDir(), "outside.txt")
+	if err := os.WriteFile(outsideFile, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := filepath.Join(server.cfg.ProcessedFolder, "escape.txt")
+	if err := os.Symlink(outsideFile, linkPath); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+
+	response = httptest.NewRecorder()
+	server.router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/download/escape.txt", http.NoBody))
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("symlink escape status=%d, want %d", response.Code, http.StatusNotFound)
+	}
+}
+
 func TestUploadRejectsOversizedBody(t *testing.T) {
 	server := newTestServer(t, 64)
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(bytes.Repeat([]byte("x"), 128)))

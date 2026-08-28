@@ -49,6 +49,28 @@ func TestIsAllowedImageFile(t *testing.T) {
 	}
 }
 
+func TestReadBoundedFile(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "font.bin")
+	if err := os.WriteFile(path, []byte("font bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	contents, err := readBoundedFile(path, 10)
+	if err != nil {
+		t.Fatalf("readBoundedFile: %v", err)
+	}
+	if string(contents) != "font bytes" {
+		t.Fatalf("contents = %q", contents)
+	}
+	if _, err := readBoundedFile(path, 9); err == nil {
+		t.Fatal("expected oversized file to be rejected")
+	}
+	if _, err := readBoundedFile(path, 0); err == nil {
+		t.Fatal("expected invalid size limit to be rejected")
+	}
+}
+
 func TestValidateDimensions(t *testing.T) {
 	t.Parallel()
 
