@@ -322,7 +322,7 @@ func drawTrueTypeText(
 // readBoundedFile opens only the named file within its parent directory. Using
 // os.Root prevents a replaced symlink from escaping that directory between path
 // validation and open, while the size limit bounds memory used by font parsing.
-func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
+func readBoundedFile(path string, maxBytes int64) (_ []byte, retErr error) {
 	if maxBytes < 1 {
 		return nil, fmt.Errorf("maximum file size must be positive")
 	}
@@ -331,13 +331,21 @@ func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open parent directory: %w", err)
 	}
-	defer func() { _ = root.Close() }()
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("close parent directory: %w", closeErr))
+		}
+	}()
 
 	file, err := root.Open(filepath.Base(cleanPath))
 	if err != nil {
 		return nil, fmt.Errorf("open file: %w", err)
 	}
-	defer func() { _ = file.Close() }()
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("close file: %w", closeErr))
+		}
+	}()
 
 	contents, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
 	if err != nil {
