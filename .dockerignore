@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+image-resizer.exe
+coverage.out
+plans
+static/uploads/*
+!static/uploads/.gitkeep
+static/processed/*
+!static/processed/.gitkeep

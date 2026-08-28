@@ -3,11 +3,10 @@ package server
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
-	"image-resizer/internal/config"
-	"image-resizer/internal/middleware"
-	"image-resizer/internal/processor"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,12 +15,71 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"image-resizer/internal/config"
+	"image-resizer/internal/middleware"
+	"image-resizer/internal/processor"
 )
 
+const maxUploadFiles = 20
+
+func safeFilename(name string) string {
+	return filepath.Base(strings.ReplaceAll(name, "\\", "/"))
+}
+
+func removeFile(path string) {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		log.Printf("failed to remove temporary file %s: %v", path, err)
+	}
+}
+
+func createArchive(processedFolder string, fileList []string, zipPath string) (returnErr error) {
+	zipFile, err := os.Create(filepath.Clean(zipPath))
+	if err != nil {
+		return fmt.Errorf("create zip: %w", err)
+	}
+	defer func() {
+		returnErr = errors.Join(returnErr, zipFile.Close())
+	}()
+
+	archive := zip.NewWriter(zipFile)
+	defer func() {
+		returnErr = errors.Join(returnErr, archive.Close())
+	}()
+	processedRoot, err := os.OpenRoot(processedFolder)
+	if err != nil {
+		return fmt.Errorf("open processed directory: %w", err)
+	}
+	defer func() {
+		returnErr = errors.Join(returnErr, processedRoot.Close())
+	}()
+
+	for _, name := range fileList {
+		safeName := safeFilename(name)
+		file, openErr := processedRoot.Open(safeName)
+		if openErr != nil {
+			continue
+		}
+
+		writer, createErr := archive.Create(safeName)
+		if createErr != nil {
+			return errors.Join(createErr, file.Close())
+		}
+
+		_, copyErr := io.Copy(writer, file)
+		closeErr := file.Close()
+		if copyErr != nil || closeErr != nil {
+			return errors.Join(copyErr, closeErr)
+		}
+	}
+	return nil
+}
+
 type Server struct {
-	router *gin.Engine
-	cfg    *config.Config
-	http   *http.Server
+	router      *gin.Engine
+	cfg         *config.Config
+	http        *http.Server
+	stopCleanup context.CancelFunc
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -30,9 +88,11 @@ func NewServer(cfg *config.Config) *Server {
 	// IMP-03 FIX: Enforce MaxContentLength limit that was defined but never used.
 	r.MaxMultipartMemory = cfg.MaxContentLength
 
+	cleanupCtx, stopCleanup := context.WithCancel(context.Background())
 	s := &Server{
-		router: r,
-		cfg:    cfg,
+		router:      r,
+		cfg:         cfg,
+		stopCleanup: stopCleanup,
 		http: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      r,
@@ -43,13 +103,16 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	s.setupRoutes()
-	go s.startCleanupWorker()
+	go s.startCleanupWorker(cleanupCtx)
 
 	return s
 }
 
 func (s *Server) setupRoutes() {
 	s.router.GET("/", s.handleIndex)
+	s.router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
 	s.router.POST("/", s.handleUpload)
 	s.router.GET("/download-all", s.handleDownloadAll)
 
@@ -80,16 +143,36 @@ func (s *Server) handleIndex(c *gin.Context) {
 // IMP-02 FIX: New route for downloading a single processed file with
 // proper Content-Disposition header.
 func (s *Server) handleDownload(c *gin.Context) {
-	filename := filepath.Base(c.Param("filename")) // sanitize path component
-	filePath := filepath.Join(s.cfg.ProcessedFolder, filename)
+	filename := safeFilename(c.Param("filename"))
+	processedRoot, err := os.OpenRoot(s.cfg.ProcessedFolder)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Unable to access processed files")
+		return
+	}
+	defer func() {
+		if closeErr := processedRoot.Close(); closeErr != nil {
+			log.Printf("close processed directory: %v", closeErr)
+		}
+	}()
 
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+	file, err := processedRoot.Open(filename)
+	if err != nil {
+		c.String(http.StatusNotFound, "File not found")
+		return
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			log.Printf("close download file: %v", closeErr)
+		}
+	}()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
 		c.String(http.StatusNotFound, "File not found")
 		return
 	}
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	c.File(filePath)
+	http.ServeContent(c.Writer, c.Request, filename, info.ModTime(), file)
 }
 
 func (s *Server) handleDownloadAll(c *gin.Context) {
@@ -103,40 +186,11 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 	zipName := fmt.Sprintf("processed_images_%d.zip", time.Now().Unix())
 	zipPath := filepath.Join(s.cfg.ProcessedFolder, zipName)
 
-	zipFile, err := os.Create(filepath.Clean(zipPath))
-	if err != nil {
+	if err := createArchive(s.cfg.ProcessedFolder, fileList, zipPath); err != nil {
+		removeFile(zipPath)
 		c.String(http.StatusInternalServerError, "Failed to create zip")
 		return
 	}
-	defer func() { _ = zipFile.Close() }()
-
-	archive := zip.NewWriter(zipFile)
-	defer func() { _ = archive.Close() }()
-
-	for _, name := range fileList {
-		safeName := filepath.Base(name)
-		filePath := filepath.Join(s.cfg.ProcessedFolder, safeName)
-		file, err := os.Open(filepath.Clean(filePath))
-		if err != nil {
-			continue
-		}
-
-		w, err := archive.Create(safeName)
-		if err != nil {
-			_ = file.Close()
-			continue
-		}
-
-		if _, err := io.Copy(w, file); err != nil {
-			_ = file.Close()
-			continue
-		}
-		_ = file.Close()
-	}
-
-	// Must close writers before serving the file
-	_ = archive.Close()
-	_ = zipFile.Close()
 
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", zipName))
 	c.File(zipPath)
@@ -144,14 +198,28 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 }
 
 func (s *Server) handleUpload(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, s.cfg.MaxContentLength)
 	form, err := c.MultipartForm()
-	if err != nil || form == nil {
+	if err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Upload exceeds the configured size limit"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid multipart form"})
+		return
+	}
+	if form == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid multipart form"})
 		return
 	}
 	files, ok := form.File["files[]"]
 	if !ok || len(files) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No files uploaded"})
+		return
+	}
+	if len(files) > maxUploadFiles {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Too many files; the maximum is 20"})
 		return
 	}
 
@@ -226,10 +294,10 @@ func (s *Server) handleUpload(c *gin.Context) {
 			return
 		}
 		// Use filepath.Base to strip any directory components, then join safely
-		safeWMName := filepath.Base(watermarkFile.Filename)
+		safeWMName := safeFilename(watermarkFile.Filename)
 		watermarkPath = filepath.Join(s.cfg.UploadFolder, fmt.Sprintf("temp_watermark_%d_%s", time.Now().UnixMilli(), safeWMName))
 		if err := c.SaveUploadedFile(watermarkFile, watermarkPath); err == nil {
-			defer func() { _ = os.Remove(watermarkPath) }()
+			defer removeFile(watermarkPath)
 		} else {
 			watermarkPath = ""
 		}
@@ -270,22 +338,22 @@ func (s *Server) handleUpload(c *gin.Context) {
 
 	var results []processor.ProcessResult
 	var processedPaths []string
-	var errors []string
+	var processingErrors []string
 
 	for _, file := range files {
-		filename := filepath.Base(file.Filename)
+		filename := safeFilename(file.Filename)
 		uploadPath := filepath.Join(s.cfg.UploadFolder, filename)
 
 		if err := c.SaveUploadedFile(file, uploadPath); err != nil {
 			// IMP-01 FIX: Collect errors instead of silently continuing
-			errors = append(errors, fmt.Sprintf("failed to save %s: %v", filename, err))
+			processingErrors = append(processingErrors, fmt.Sprintf("failed to save %s: %v", filename, err))
 			continue
 		}
 
 		res, err := processor.ProcessImage(uploadPath, s.cfg.ProcessedFolder, &opts)
-		_ = os.Remove(uploadPath)
+		removeFile(uploadPath)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("failed to process %s: %v", filename, err))
+			processingErrors = append(processingErrors, fmt.Sprintf("failed to process %s: %v", filename, err))
 			continue
 		}
 
@@ -308,16 +376,16 @@ func (s *Server) handleUpload(c *gin.Context) {
 			}
 			results = []processor.ProcessResult{pdfResult}
 		} else {
-			errors = append(errors, fmt.Sprintf("failed to create PDF: %v", err))
+			processingErrors = append(processingErrors, fmt.Sprintf("failed to create PDF: %v", err))
 		}
 	}
 
 	// IMP-01 FIX: Return error details in the response instead of silently
 	// returning empty arrays. If all files failed, return 207 Multi-Status.
-	if len(results) == 0 && len(errors) > 0 {
+	if len(results) == 0 && len(processingErrors) > 0 {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"error":  "All files failed to process",
-			"errors": errors,
+			"errors": processingErrors,
 		})
 		return
 	}
@@ -325,18 +393,24 @@ func (s *Server) handleUpload(c *gin.Context) {
 	response := gin.H{
 		"results": results,
 	}
-	if len(errors) > 0 {
-		response["errors"] = errors
+	if len(processingErrors) > 0 {
+		response["errors"] = processingErrors
 	}
 
 	c.JSON(http.StatusOK, response)
 }
 
-func (s *Server) startCleanupWorker() {
+func (s *Server) startCleanupWorker(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Hour)
-	for range ticker.C {
-		s.cleanupFiles(s.cfg.UploadFolder, 1*time.Hour)
-		s.cleanupFiles(s.cfg.ProcessedFolder, 12*time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.cleanupFiles(s.cfg.UploadFolder, 1*time.Hour)
+			s.cleanupFiles(s.cfg.ProcessedFolder, 12*time.Hour)
+		}
 	}
 }
 
@@ -353,7 +427,7 @@ func (s *Server) cleanupFiles(dir string, maxAge time.Duration) {
 			continue
 		}
 		if now.Sub(info.ModTime()) > maxAge {
-			_ = os.Remove(filepath.Join(dir, f.Name()))
+			removeFile(filepath.Join(dir, f.Name()))
 		}
 	}
 }
@@ -367,5 +441,6 @@ func (s *Server) Start() error {
 // gin.Run() which doesn't handle OS signals, causing abrupt termination
 // of in-progress requests when the container stops.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.stopCleanup()
 	return s.http.Shutdown(ctx)
 }
