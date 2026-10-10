@@ -408,7 +408,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 
 		if fontPath != "" {
-			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
+			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304 G703 -- Font path is operator-controlled FONT_PATH or a fixed platform default, never request input.
 			if fErr == nil {
 				f, pErr := freetype.ParseFont(fontBytes)
 				if pErr == nil {
@@ -457,7 +457,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 
 		if fontPath != "" {
-			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
+			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304 G703 -- Font path is operator-controlled FONT_PATH or a fixed platform default, never request input.
 			if fErr == nil {
 				f, pErr := freetype.ParseFont(fontBytes)
 				if pErr == nil {
