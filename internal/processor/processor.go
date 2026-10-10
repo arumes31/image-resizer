@@ -169,7 +169,8 @@ func applyVignette(img image.Image) image.Image {
 			dy := float64(y) - cy
 			dist := math.Sqrt(dx*dx + dy*dy)
 			// Vignette strength: 0 at center, up to ~0.7 at corners
-			factor := 1.0 - 0.7*math.Pow(dist/maxDist, 2)
+			normalizedDistance := dist / maxDist
+			factor := 1.0 - 0.7*normalizedDistance*normalizedDistance
 			if factor < 0 {
 				factor = 0
 			}
