@@ -1,6 +1,6 @@
 module image-resizer
 
-go 1.26.4
+go 1.26.9
 
 require (
 	github.com/chai2010/webp v1.4.0
@@ -9,7 +9,7 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/jung-kurt/gofpdf v1.16.2
 	github.com/sergeymakinen/go-ico v1.0.0
-	golang.org/x/image v0.42.0
+	golang.org/x/image v0.45.0
 )
 
 require (
@@ -38,9 +38,9 @@ require (
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
 	golang.org/x/arch v0.28.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
