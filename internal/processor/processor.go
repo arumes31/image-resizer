@@ -169,7 +169,8 @@ func applyVignette(img image.Image) image.Image {
 			dy := float64(y) - cy
 			dist := math.Sqrt(dx*dx + dy*dy)
 			// Vignette strength: 0 at center, up to ~0.7 at corners
-			factor := 1.0 - 0.7*math.Pow(dist/maxDist, 2)
+			normalizedDistance := dist / maxDist
+			factor := 1.0 - 0.7*normalizedDistance*normalizedDistance
 			if factor < 0 {
 				factor = 0
 			}
@@ -408,7 +409,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 
 		if fontPath != "" {
-			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
+			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304 G703 -- Font path is operator-controlled FONT_PATH or a fixed platform default, never request input.
 			if fErr == nil {
 				f, pErr := freetype.ParseFont(fontBytes)
 				if pErr == nil {
@@ -457,7 +458,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 
 		if fontPath != "" {
-			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304
+			fontBytes, fErr := os.ReadFile(filepath.Clean(fontPath)) // #nosec G304 G703 -- Font path is operator-controlled FONT_PATH or a fixed platform default, never request input.
 			if fErr == nil {
 				f, pErr := freetype.ParseFont(fontBytes)
 				if pErr == nil {
