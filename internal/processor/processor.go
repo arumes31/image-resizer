@@ -643,7 +643,9 @@ func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*Pro
 	if opts.RenameTemplate != "" {
 		baseName = strings.ReplaceAll(opts.RenameTemplate, "{name}", origNameNoExt)
 	}
-	processedFileName := fmt.Sprintf("%s_%s.%s", SanitizeFileName(baseName), token, ext)
+	// filepath.Base is redundant after the checks above but keeps the final
+	// name a single path component even if the allowlists change.
+	processedFileName := filepath.Base(fmt.Sprintf("%s_%s.%s", SanitizeFileName(baseName), token, ext))
 
 	destPath, err := safeJoin(destDir, processedFileName)
 	if err != nil {
