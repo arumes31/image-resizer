@@ -96,6 +96,9 @@ var (
 // unsafeNameChars matches everything outside the allowlist for output file names.
 var unsafeNameChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
+// repeatedDots matches runs of dots, which are collapsed so names never contain "..".
+var repeatedDots = regexp.MustCompile(`\.{2,}`)
+
 type ProcessResult struct {
 	OriginalName  string `json:"originalName"`
 	ProcessedName string `json:"processedName"`
@@ -166,6 +169,7 @@ func ValidateRenameTemplate(tmpl string) error {
 func SanitizeFileName(name string) string {
 	name = filepath.Base(strings.ReplaceAll(name, `\`, "/"))
 	name = unsafeNameChars.ReplaceAllString(name, "_")
+	name = repeatedDots.ReplaceAllString(name, ".")
 	name = strings.TrimLeft(name, ".")
 	if len(name) > maxNameLength {
 		name = name[:maxNameLength]
@@ -197,6 +201,9 @@ func CheckImageDimensions(path string) error {
 
 // safeJoin joins name onto dir and verifies the result stays inside dir.
 func safeJoin(dir, name string) (string, error) {
+	if strings.Contains(name, "..") || !filepath.IsLocal(name) {
+		return "", fmt.Errorf("output path escapes destination directory: %q", name)
+	}
 	joined := filepath.Join(dir, name)
 	rel, err := filepath.Rel(dir, joined)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {

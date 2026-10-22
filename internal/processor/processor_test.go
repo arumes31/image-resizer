@@ -148,6 +148,7 @@ func TestSanitizeFileName(t *testing.T) {
 		"my photo (1).png":       "my_photo__1_.png",
 		"..":                     "image",
 		".hidden":                "hidden",
+		"a..b.png":               "a.b.png",
 		"":                       "image",
 		strings.Repeat("a", 300): strings.Repeat("a", maxNameLength),
 	}
