@@ -17,7 +17,7 @@ COPY . .
 RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o image-resizer ./cmd/server/main.go
 
 # Final stage
-FROM alpine:latest
+FROM alpine:3.24@sha256:71e9b7bae160ba167fa17414401b94cbcdaf3c32feeab9298bd794a2a0614c35
 
 WORKDIR /app
 
@@ -33,12 +33,17 @@ COPY --from=builder /app/image-resizer .
 COPY --from=builder /app/web ./web
 COPY --from=builder /app/static ./static
 
-# Ensure directories exist with proper permissions
-RUN mkdir -p static/uploads static/processed && \
+# Run as an unprivileged user; only the runtime data directories are writable.
+RUN addgroup -S app && adduser -S -G app -H -h /app app && \
+    mkdir -p static/uploads static/processed && \
+    chown app:app static/uploads static/processed && \
     chmod 750 static/uploads static/processed
 
 EXPOSE 5000
 
-ENV PORT=5000
+ENV PORT=5000 \
+    ENV=production
+
+USER app
 
 CMD ["./image-resizer"]

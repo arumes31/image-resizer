@@ -65,14 +65,30 @@ graph TD
 ### 📦 Run with Docker
 ```bash
 docker pull ghcr.io/arumes31/image-resizer:latest
-docker run -p 5000:5000 ghcr.io/arumes31/image-resizer:latest
+docker run -p 5000:5000   -e UI_PASSWORD="$(openssl rand -hex 16)"   -e API_KEY="$(openssl rand -hex 32)"   ghcr.io/arumes31/image-resizer:latest
 ```
+The container runs as an unprivileged `app` user. If you bind-mount `static/uploads` or `static/processed`, make sure they are writable by that user.
 
 ### 🔨 Development Mode
 ```bash
 go run cmd/server/main.go
 ```
 Open `http://localhost:5000` to access the dashboard.
+
+### ⚙️ Configuration
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `API_KEY` | *(unset)* | Key for `/api/v1/*`. Must be at least 32 characters. If unset, the API rejects all requests. The old built-in default key is refused at startup. |
+| `UI_PASSWORD` | *(unset)* | Enables HTTP Basic auth for the web UI and downloads. Strongly recommended for anything reachable from the internet (or put the UI behind an authenticating reverse proxy). |
+| `UI_USERNAME` | `admin` | Username for `UI_PASSWORD`. |
+| `MAX_UPLOAD_MB` | `32` | Maximum request body size per upload request. |
+| `MAX_FILES_PER_REQUEST` | `20` | Maximum number of images per request (`0` = unlimited). |
+| `RATE_LIMIT_PER_MINUTE` | `30` | Upload requests allowed per client IP per minute (`0` = disabled). |
+| `MAX_CONCURRENT_JOBS` | number of CPUs | Images processed at the same time across all requests. |
+| `TRUSTED_PROXIES` | *(none)* | Comma-separated proxy IPs/CIDRs whose `X-Forwarded-For` is trusted for client IP detection. |
+| `UPLOAD_FOLDER` / `PROCESSED_FOLDER` | `static/uploads` / `static/processed` | Storage directories. |
+| `PORT` | `5000` | Listen port. |
 
 ---
 
@@ -112,8 +128,8 @@ All API endpoints (except `/api/v1/status`) require an API key passed via the HT
 | `files[]` | File | - | **(Required)** Images to process. Allowed: jpg, png, gif, bmp, tiff, webp, ico |
 | `operation` | String | `percentage` | The resize operation: `percentage` or `fill` |
 | `percentage` | Integer | `100` | Scale percentage (max: 500) |
-| `width` | Integer | `0` | Target width in pixels |
-| `height` | Integer | `0` | Target height in pixels |
+| `width` | Integer | `0` | Target width in pixels (max: 10000) |
+| `height` | Integer | `0` | Target height in pixels (max: 10000) |
 | `quality` | Integer | `85` | Output image quality (1-100) |
 | `rotation` | Integer | `0` | Degrees to rotate: `0`, `90`, `180`, `270` |
 | `brightness` | Float | `0` | Adjust brightness |
@@ -121,7 +137,7 @@ All API endpoints (except `/api/v1/status`) require an API key passed via the HT
 | `saturation` | Float | `0` | Adjust saturation |
 | `pixelate` | Integer | `0` | Pixelation factor |
 | `watermark` | File | - | Image file to use as a watermark overlay |
-| `format` | String | Original | Output format (e.g., `jpg`, `png`, `webp`, `pdf`) |
+| `format` | String | `jpg` | Output format: `jpg`, `jpeg`, `png`, `gif`, `bmp`, `tiff`, `webp`, `ico`, `pdf` |
 | `resize_method` | String | - | Resampling method |
 | `flip` | String | - | Flip direction: `horizontal`, `vertical` |
 | `filters[]` | String Array| - | Array of filters (e.g., Noir, Vivid, Sepia) |
@@ -131,7 +147,7 @@ All API endpoints (except `/api/v1/status`) require an API key passed via the HT
 | `copyright` | String | - | Copyright text to embed in metadata |
 | `crop` | String | - | Crop aspect ratio |
 | `vignette` | String | - | Set to `on` to apply a vignette effect |
-| `rename_template`| String | - | Template for renaming output files |
+| `rename_template`| String | - | Template for renaming output files (`{name}` = original name). Must not contain `/`, `\` or `..`; other characters outside `A-Za-z0-9._-` become `_`. |
 
 **Responses:**
 
@@ -140,11 +156,10 @@ All API endpoints (except `/api/v1/status`) require an API key passed via the HT
 {
   "results": [
     {
-      "OriginalName": "photo.jpg",
-      "ProcessedName": "processed_photo.jpg",
-      "OriginalSize": "1.5 MB",
-      "NewSize": "450 KB",
-      "NewFilePath": "static/processed/processed_photo.jpg"
+      "originalName": "photo.jpg",
+      "processedName": "processed_photo_3f9c2b7e8a1d4c6f9e0b2a4d6c8e0f12.jpg",
+      "originalSize": "4000x3000",
+      "newSize": "2000x1500"
     }
   ]
 }
@@ -157,13 +172,19 @@ If some files fail but others succeed, the response includes both `results` and 
 Returned if all uploaded files fail to process. Includes an `errors` array.
 
 *Bad Request (400 Bad Request):*
-Returned for invalid form data or unallowed file extensions.
+Returned for invalid form data, unallowed file extensions or formats, invalid rename templates, or too many files.
+
+*Payload Too Large (413) / Too Many Requests (429):*
+Returned when the request body exceeds `MAX_UPLOAD_MB` or the per-IP rate limit is hit.
+
+Processed files are named with a random 128-bit suffix and can be fetched via `/processed/<processedName>` or `/download/<processedName>`.
 
 ---
 
 ## 🔒 Security & Privacy
 - **Privacy:** One-click EXIF stripping removes metadata (GPS, Timestamps).
-- **Safety:** Constant-time comparison for API keys; 500% scaling cap to prevent memory exhaustion (enforced in `handleUpload` in `internal/server/server.go`).
+- **Safety:** Constant-time comparison for API keys; request body cap, file count limit, per-IP rate limit and processing concurrency limit; images over 40 megapixels (input or output) are rejected before decoding to prevent decompression bombs.
+- **Isolation:** Uploads and outputs use random, unguessable names; rename templates cannot introduce path components.
 - **Audited:** Scanned with `gosec` and `govulncheck` on every commit.
 
 ---

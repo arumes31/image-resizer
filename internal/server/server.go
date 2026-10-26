@@ -3,14 +3,17 @@ package server
 import (
 	"archive/zip"
 	"context"
+	"errors"
 	"fmt"
 	"image-resizer/internal/config"
 	"image-resizer/internal/middleware"
 	"image-resizer/internal/processor"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -22,17 +25,31 @@ type Server struct {
 	router *gin.Engine
 	cfg    *config.Config
 	http   *http.Server
+	jobs   chan struct{} // bounds concurrent image processing
 }
 
 func NewServer(cfg *config.Config) *Server {
 	r := gin.Default()
 
+	// Only trust X-Forwarded-For from explicitly configured proxies, so
+	// clients cannot spoof their IP to evade per-IP rate limiting.
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("FATAL: invalid TRUSTED_PROXIES: %v", err)
+	}
+
 	// IMP-03 FIX: Enforce MaxContentLength limit that was defined but never used.
+	// The hard request body cap is applied with http.MaxBytesReader in handleUpload.
 	r.MaxMultipartMemory = cfg.MaxContentLength
+
+	maxJobs := cfg.MaxConcurrent
+	if maxJobs <= 0 {
+		maxJobs = runtime.NumCPU()
+	}
 
 	s := &Server{
 		router: r,
 		cfg:    cfg,
+		jobs:   make(chan struct{}, maxJobs),
 		http: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      r,
@@ -49,16 +66,25 @@ func NewServer(cfg *config.Config) *Server {
 }
 
 func (s *Server) setupRoutes() {
-	s.router.GET("/", s.handleIndex)
-	s.router.POST("/", s.handleUpload)
-	s.router.GET("/download-all", s.handleDownloadAll)
+	var uploadHandlers []gin.HandlerFunc
+	if s.cfg.RateLimitPerMinute > 0 {
+		uploadHandlers = append(uploadHandlers, middleware.NewRateLimiter(s.cfg.RateLimitPerMinute).Middleware())
+	}
+	uploadHandlers = append(uploadHandlers, s.handleUpload)
+
+	// Web UI: optional HTTP Basic auth (UI_PASSWORD), CSRF check and rate limit
+	// on uploads. Without UI_PASSWORD the UI stays open as before.
+	ui := s.router.Group("/", middleware.UIBasicAuth(s.cfg.UIUsername, s.cfg.UIPassword))
+	ui.GET("/", s.handleIndex)
+	ui.POST("/", append([]gin.HandlerFunc{middleware.SameOrigin()}, uploadHandlers...)...)
+	ui.GET("/download-all", s.handleDownloadAll)
 
 	// IMP-02 FIX: Add single file download route with Content-Disposition header
 	// so direct URL access triggers a download with the correct filename.
-	s.router.GET("/download/:filename", s.handleDownload)
+	ui.GET("/download/:filename", s.handleDownload)
+	ui.Static("/processed", s.cfg.ProcessedFolder)
 
 	s.router.Static("/static", "./web/static")
-	s.router.Static("/processed", s.cfg.ProcessedFolder)
 
 	// Developer API
 	// IMP-05 FIX: Add CORS middleware to API routes so browser-based
@@ -67,7 +93,7 @@ func (s *Server) setupRoutes() {
 	api.Use(middleware.CORS())
 	api.Use(middleware.APIKeyAuth(s.cfg.APIKey))
 
-	api.POST("/process", s.handleUpload)
+	api.POST("/process", uploadHandlers...)
 	api.GET("/status", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "operational", "version": "v2.0.0-go"})
 	})
@@ -101,13 +127,16 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 
 	fileList := strings.Split(filenames, ",")
 	zipName := fmt.Sprintf("processed_images_%d.zip", time.Now().Unix())
-	zipPath := filepath.Join(s.cfg.ProcessedFolder, zipName)
 
-	zipFile, err := os.Create(filepath.Clean(zipPath))
+	// Build the archive in a unique temp file so concurrent requests never
+	// collide; it is removed once it has been served.
+	zipFile, err := os.CreateTemp("", "processed_images_*.zip")
 	if err != nil {
 		c.String(http.StatusInternalServerError, "Failed to create zip")
 		return
 	}
+	zipPath := zipFile.Name()
+	defer func() { _ = os.Remove(zipPath) }()
 	defer func() { _ = zipFile.Close() }()
 
 	archive := zip.NewWriter(zipFile)
@@ -143,15 +172,55 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 
 }
 
+// publicError maps a processing error to a message that is safe to return to
+// clients. Unexpected errors are logged server-side and reported generically.
+func publicError(err error) string {
+	for _, known := range []error{
+		processor.ErrImageTooLarge,
+		processor.ErrOutputTooLarge,
+		processor.ErrInvalidImage,
+		processor.ErrInvalidFormat,
+		processor.ErrInvalidRenameTemplate,
+	} {
+		if errors.Is(err, known) {
+			return known.Error()
+		}
+	}
+	return "internal processing error"
+}
+
 func (s *Server) handleUpload(c *gin.Context) {
+	// Hard cap on the request body; MaxMultipartMemory alone only limits
+	// in-memory buffering and lets larger parts spill to disk.
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, s.cfg.MaxContentLength)
+
 	form, err := c.MultipartForm()
 	if err != nil || form == nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{
+				"error": fmt.Sprintf("Request too large (max %d MB)", s.cfg.MaxContentLength/(1024*1024)),
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid multipart form"})
 		return
 	}
+	defer func() {
+		if rErr := form.RemoveAll(); rErr != nil {
+			log.Printf("failed to remove multipart temp files: %v", rErr)
+		}
+	}()
+
 	files, ok := form.File["files[]"]
 	if !ok || len(files) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No files uploaded"})
+		return
+	}
+	if s.cfg.MaxFilesPerRequest > 0 && len(files) > s.cfg.MaxFilesPerRequest {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": fmt.Sprintf("Too many files (max %d per request)", s.cfg.MaxFilesPerRequest),
+		})
 		return
 	}
 
@@ -174,12 +243,25 @@ func (s *Server) handleUpload(c *gin.Context) {
 	}
 
 	width, err := strconv.Atoi(c.DefaultPostForm("width", "0"))
-	if err != nil {
+	if err != nil || width < 0 {
 		width = 0
 	}
+	width = min(width, processor.MaxOutputDimension)
 	height, err := strconv.Atoi(c.DefaultPostForm("height", "0"))
-	if err != nil {
+	if err != nil || height < 0 {
 		height = 0
+	}
+	height = min(height, processor.MaxOutputDimension)
+
+	format := strings.ToLower(c.PostForm("format"))
+	if !processor.IsAllowedFormat(format) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Output format not allowed"})
+		return
+	}
+	renameTemplate := c.PostForm("rename_template")
+	if vErr := processor.ValidateRenameTemplate(renameTemplate); vErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": vErr.Error()})
+		return
 	}
 
 	quality, err := strconv.Atoi(c.DefaultPostForm("quality", "85"))
@@ -225,9 +307,14 @@ func (s *Server) handleUpload(c *gin.Context) {
 			})
 			return
 		}
-		// Use filepath.Base to strip any directory components, then join safely
-		safeWMName := filepath.Base(watermarkFile.Filename)
-		watermarkPath = filepath.Join(s.cfg.UploadFolder, fmt.Sprintf("temp_watermark_%d_%s", time.Now().UnixMilli(), safeWMName))
+		// Store under a random name so concurrent uploads never collide.
+		token, tErr := processor.RandomToken()
+		if tErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal processing error"})
+			return
+		}
+		wmExt := strings.ToLower(filepath.Ext(watermarkFile.Filename))
+		watermarkPath = filepath.Join(s.cfg.UploadFolder, "temp_watermark_"+token+wmExt)
 		if err := c.SaveUploadedFile(watermarkFile, watermarkPath); err == nil {
 			defer func() { _ = os.Remove(watermarkPath) }()
 		} else {
@@ -248,7 +335,7 @@ func (s *Server) handleUpload(c *gin.Context) {
 		Width:          width,
 		Height:         height,
 		Quality:        quality,
-		Format:         c.PostForm("format"),
+		Format:         format,
 		Method:         c.PostForm("resize_method"),
 		Rotation:       rotation,
 		Flip:           c.PostForm("flip"),
@@ -265,27 +352,46 @@ func (s *Server) handleUpload(c *gin.Context) {
 		Pixelate:       pixelate,
 		Crop:           c.PostForm("crop"),
 		Vignette:       c.PostForm("vignette") == "on",
-		RenameTemplate: c.PostForm("rename_template"),
+		RenameTemplate: renameTemplate,
 	}
 
 	var results []processor.ProcessResult
 	var processedPaths []string
-	var errors []string
+	var errs []string
 
 	for _, file := range files {
-		filename := filepath.Base(file.Filename)
-		uploadPath := filepath.Join(s.cfg.UploadFolder, filename)
+		filename := processor.SanitizeFileName(file.Filename)
 
-		if err := c.SaveUploadedFile(file, uploadPath); err != nil {
+		// Uploads are stored under random names so that users who upload
+		// files with the same name never overwrite each other.
+		token, err := processor.RandomToken()
+		if err != nil {
+			log.Printf("failed to generate upload name: %v", err)
+			errs = append(errs, fmt.Sprintf("failed to save %s", filename))
+			continue
+		}
+		uploadPath := filepath.Join(s.cfg.UploadFolder, token+strings.ToLower(filepath.Ext(file.Filename)))
+
+		if sErr := c.SaveUploadedFile(file, uploadPath); sErr != nil {
 			// IMP-01 FIX: Collect errors instead of silently continuing
-			errors = append(errors, fmt.Sprintf("failed to save %s: %v", filename, err))
+			log.Printf("failed to save upload %s: %v", filename, sErr)
+			errs = append(errs, fmt.Sprintf("failed to save %s", filename))
 			continue
 		}
 
-		res, err := processor.ProcessImage(uploadPath, s.cfg.ProcessedFolder, &opts)
+		// Bound the number of images decoded at once across all requests.
+		select {
+		case s.jobs <- struct{}{}:
+		case <-c.Request.Context().Done():
+			_ = os.Remove(uploadPath)
+			return
+		}
+		res, err := processor.ProcessImage(uploadPath, file.Filename, s.cfg.ProcessedFolder, &opts)
+		<-s.jobs
 		_ = os.Remove(uploadPath)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("failed to process %s: %v", filename, err))
+			log.Printf("failed to process %s: %v", filename, err)
+			errs = append(errs, fmt.Sprintf("failed to process %s: %s", filename, publicError(err)))
 			continue
 		}
 
@@ -297,7 +403,11 @@ func (s *Server) handleUpload(c *gin.Context) {
 	// with just the PDF document instead of returning both the PDF and intermediate JPGs.
 	// This prevents the frontend from displaying intermediate JPGs to the user.
 	if opts.Format == "pdf" && len(processedPaths) > 0 {
-		pdfPath := filepath.Join(s.cfg.ProcessedFolder, fmt.Sprintf("document_%d.pdf", time.Now().UnixMilli()))
+		token, err := processor.RandomToken()
+		if err != nil {
+			token = strconv.FormatInt(time.Now().UnixNano(), 10)
+		}
+		pdfPath := filepath.Join(s.cfg.ProcessedFolder, "document_"+token+".pdf")
 		if err := processor.CreatePDF(processedPaths, pdfPath); err == nil {
 			pdfResult := processor.ProcessResult{
 				OriginalName:  "Multiple Images",
@@ -308,16 +418,17 @@ func (s *Server) handleUpload(c *gin.Context) {
 			}
 			results = []processor.ProcessResult{pdfResult}
 		} else {
-			errors = append(errors, fmt.Sprintf("failed to create PDF: %v", err))
+			log.Printf("failed to create PDF: %v", err)
+			errs = append(errs, "failed to create PDF")
 		}
 	}
 
 	// IMP-01 FIX: Return error details in the response instead of silently
 	// returning empty arrays. If all files failed, return 207 Multi-Status.
-	if len(results) == 0 && len(errors) > 0 {
+	if len(results) == 0 && len(errs) > 0 {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{
 			"error":  "All files failed to process",
-			"errors": errors,
+			"errors": errs,
 		})
 		return
 	}
@@ -325,8 +436,8 @@ func (s *Server) handleUpload(c *gin.Context) {
 	response := gin.H{
 		"results": results,
 	}
-	if len(errors) > 0 {
-		response["errors"] = errors
+	if len(errs) > 0 {
+		response["errors"] = errs
 	}
 
 	c.JSON(http.StatusOK, response)

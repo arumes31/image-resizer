@@ -1,6 +1,9 @@
 package processor
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -11,7 +14,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
@@ -50,12 +52,59 @@ var AllowedExtensions = map[string]bool{
 	".ico":  true,
 }
 
+// AllowedFormats defines which output formats may be requested.
+// An empty format keeps the default (JPEG).
+var AllowedFormats = map[string]bool{
+	"":     true,
+	"jpg":  true,
+	"jpeg": true,
+	"png":  true,
+	"gif":  true,
+	"bmp":  true,
+	"tiff": true,
+	"tif":  true,
+	"webp": true,
+	"ico":  true,
+	"pdf":  true,
+}
+
+// Limits that protect against decompression bombs and oversized outputs.
+const (
+	// MaxInputPixels is the largest decoded image (width*height) accepted.
+	MaxInputPixels = 40_000_000
+	// MaxOutputDimension is the largest width or height of a processed image.
+	MaxOutputDimension = 10000
+	// MaxOutputPixels is the largest processed image (width*height) produced.
+	MaxOutputPixels = 40_000_000
+	// maxNameLength caps the length of the user-controlled part of output names.
+	maxNameLength = 100
+)
+
+var (
+	// ErrImageTooLarge is returned when an input image exceeds MaxInputPixels.
+	ErrImageTooLarge = errors.New("image dimensions exceed the allowed limit")
+	// ErrOutputTooLarge is returned when the requested output exceeds the output limits.
+	ErrOutputTooLarge = errors.New("requested output dimensions exceed the allowed limit")
+	// ErrInvalidImage is returned when an input cannot be decoded as an image.
+	ErrInvalidImage = errors.New("file is not a valid image")
+	// ErrInvalidFormat is returned for output formats outside AllowedFormats.
+	ErrInvalidFormat = errors.New("output format not allowed")
+	// ErrInvalidRenameTemplate is returned for templates containing path components.
+	ErrInvalidRenameTemplate = errors.New("rename template must not contain path separators or '..'")
+)
+
+// unsafeNameChars matches everything outside the allowlist for output file names.
+var unsafeNameChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
+
+// repeatedDots matches runs of dots, which are collapsed so names never contain "..".
+var repeatedDots = regexp.MustCompile(`\.{2,}`)
+
 type ProcessResult struct {
 	OriginalName  string `json:"originalName"`
 	ProcessedName string `json:"processedName"`
 	OriginalSize  string `json:"originalSize"`
 	NewSize       string `json:"newSize"`
-	NewFilePath   string `json:"newFilePath"`
+	NewFilePath   string `json:"-"` // server-side path, never sent to clients
 	Error         string `json:"error,omitempty"`
 }
 
@@ -90,6 +139,77 @@ type ProcessOptions struct {
 func IsAllowedImageFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return AllowedExtensions[ext]
+}
+
+// IsAllowedFormat checks whether the requested output format is supported.
+func IsAllowedFormat(format string) bool {
+	return AllowedFormats[strings.ToLower(format)]
+}
+
+// RandomToken returns 128 bits of randomness as a hex string. It is used to
+// give uploads and outputs unguessable, collision-free names.
+func RandomToken() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// ValidateRenameTemplate rejects templates that try to introduce path components.
+func ValidateRenameTemplate(tmpl string) error {
+	if strings.ContainsAny(tmpl, `/\`) || strings.Contains(tmpl, "..") {
+		return ErrInvalidRenameTemplate
+	}
+	return nil
+}
+
+// SanitizeFileName reduces a name to a single safe path component made of
+// [A-Za-z0-9._-], without leading dots, capped at maxNameLength characters.
+func SanitizeFileName(name string) string {
+	name = filepath.Base(strings.ReplaceAll(name, `\`, "/"))
+	name = unsafeNameChars.ReplaceAllString(name, "_")
+	name = repeatedDots.ReplaceAllString(name, ".")
+	name = strings.TrimLeft(name, ".")
+	if len(name) > maxNameLength {
+		name = name[:maxNameLength]
+	}
+	if name == "" {
+		name = "image"
+	}
+	return name
+}
+
+// CheckImageDimensions reads only the image header and rejects images whose
+// decoded size would exceed MaxInputPixels, before any full decode happens.
+func CheckImageDimensions(path string) error {
+	f, err := os.Open(filepath.Clean(path)) // #nosec G304 -- path is generated server-side from a random token.
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidImage, err)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > MaxInputPixels {
+		return ErrImageTooLarge
+	}
+	return nil
+}
+
+// safeJoin joins name onto dir and verifies the result stays inside dir.
+func safeJoin(dir, name string) (string, error) {
+	if strings.Contains(name, "..") || !filepath.IsLocal(name) {
+		return "", fmt.Errorf("output path escapes destination directory: %q", name)
+	}
+	joined := filepath.Join(dir, name)
+	rel, err := filepath.Rel(dir, joined)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("output path escapes destination directory: %q", name)
+	}
+	return joined, nil
 }
 
 func getPlatformFontPath() string {
@@ -211,7 +331,22 @@ func parseHexColor(hexStr string) (r, g, b uint8) {
 	return
 }
 
-func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult, error) {
+// ProcessImage processes the image at srcPath and writes the result into destDir.
+// origName is the client-supplied file name; it is only used (sanitized) to
+// build a readable output name.
+func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*ProcessResult, error) {
+	if !IsAllowedFormat(opts.Format) {
+		return nil, ErrInvalidFormat
+	}
+	if opts.RenameTemplate != "" {
+		if err := ValidateRenameTemplate(opts.RenameTemplate); err != nil {
+			return nil, err
+		}
+	}
+	if err := CheckImageDimensions(srcPath); err != nil {
+		return nil, err
+	}
+
 	img, err := imaging.Open(srcPath, imaging.AutoOrientation(true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open image: %w", err)
@@ -373,6 +508,10 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 	if newHeight < 1 {
 		newHeight = 1
 	}
+	if newWidth > MaxOutputDimension || newHeight > MaxOutputDimension ||
+		int64(newWidth)*int64(newHeight) > MaxOutputPixels {
+		return nil, ErrOutputTooLarge
+	}
 
 	resampleFilter := imaging.Lanczos
 	if f, ok := ResizeMethods[strings.ToLower(opts.Method)]; ok {
@@ -390,7 +529,11 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 
 	// 7. Watermarking
 	if opts.WatermarkPath != "" {
-		wm, wErr := imaging.Open(opts.WatermarkPath)
+		wErr := CheckImageDimensions(opts.WatermarkPath)
+		var wm image.Image
+		if wErr == nil {
+			wm, wErr = imaging.Open(opts.WatermarkPath)
+		}
 		if wErr == nil {
 			resizedImg = imaging.OverlayCenter(resizedImg, wm, 0.5)
 		} else {
@@ -488,7 +631,7 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		}
 	}
 
-	fileName := filepath.Base(srcPath)
+	fileName := SanitizeFileName(origName)
 	origNameNoExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
 	ext := strings.ToLower(opts.Format)
@@ -496,17 +639,25 @@ func ProcessImage(srcPath, destDir string, opts *ProcessOptions) (*ProcessResult
 		ext = "jpg" // PDF intermediate is JPG
 	}
 
-	// BUG-07 FIX: Add timestamp suffix to prevent filename collisions
-	// when multiple users upload files with the same name concurrently.
-	processedFileName := ""
-	if opts.RenameTemplate != "" {
-		processedFileName = strings.ReplaceAll(opts.RenameTemplate, "{name}", origNameNoExt)
-		processedFileName = fmt.Sprintf("%s_%d.%s", processedFileName, time.Now().UnixMilli(), ext)
-	} else {
-		processedFileName = fmt.Sprintf("processed_%s_%d.%s", origNameNoExt, time.Now().UnixMilli(), ext)
+	// BUG-07 FIX: Add a random suffix to prevent filename collisions when
+	// multiple users upload files with the same name concurrently. The 128-bit
+	// token also makes output names unguessable for other users.
+	token, err := RandomToken()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate file name: %w", err)
 	}
+	baseName := "processed_" + origNameNoExt
+	if opts.RenameTemplate != "" {
+		baseName = strings.ReplaceAll(opts.RenameTemplate, "{name}", origNameNoExt)
+	}
+	// filepath.Base is redundant after the checks above but keeps the final
+	// name a single path component even if the allowlists change.
+	processedFileName := filepath.Base(fmt.Sprintf("%s_%s.%s", SanitizeFileName(baseName), token, ext))
 
-	destPath := filepath.Join(destDir, processedFileName)
+	destPath, err := safeJoin(destDir, processedFileName)
+	if err != nil {
+		return nil, err
+	}
 
 	// BUG-03 FIX: Only apply JPEG quality option when the output format
 	// is JPEG. Previously, JPEGQuality was added for all formats which
