@@ -65,9 +65,19 @@ graph TD
 ### 📦 Run with Docker
 ```bash
 docker pull ghcr.io/arumes31/image-resizer:latest
-docker run -p 5000:5000   -e UI_PASSWORD="$(openssl rand -hex 16)"   -e API_KEY="$(openssl rand -hex 32)"   ghcr.io/arumes31/image-resizer:latest
+docker run -p 127.0.0.1:5000:5000   -e UI_PASSWORD="$(openssl rand -hex 16)"   -e API_KEY="$(openssl rand -hex 32)"   ghcr.io/arumes31/image-resizer:latest
 ```
 The container runs as an unprivileged `app` user. If you bind-mount `static/uploads` or `static/processed`, make sure they are writable by that user.
+
+The quick start publishes the port on loopback only, because the server speaks plain HTTP and the UI password and API key would otherwise cross the network unencrypted.
+
+### 🔒 Remote Access (HTTPS)
+For access from other machines, use one of:
+- **Reverse proxy (recommended):** keep the container bound to `127.0.0.1` (or an internal Docker network) and terminate HTTPS in Caddy, nginx, Traefik or similar in front of it. Set `TRUSTED_PROXIES` to the proxy address so per-client rate limiting sees real client IPs.
+- **Built-in TLS:** mount a certificate and key and set `TLS_CERT_FILE` and `TLS_KEY_FILE`; the server then serves HTTPS only (TLS 1.2+) on `PORT`.
+  ```bash
+  docker run -p 5000:5000 -v /etc/ssl/resizer:/certs:ro     -e TLS_CERT_FILE=/certs/fullchain.pem -e TLS_KEY_FILE=/certs/privkey.pem     -e UI_PASSWORD="$(openssl rand -hex 16)" -e API_KEY="$(openssl rand -hex 32)"     ghcr.io/arumes31/image-resizer:latest
+  ```
 
 ### 🔨 Development Mode
 ```bash
@@ -89,6 +99,9 @@ Open `http://localhost:5000` to access the dashboard.
 | `TRUSTED_PROXIES` | *(none)* | Comma-separated proxy IPs/CIDRs whose `X-Forwarded-For` is trusted for client IP detection. |
 | `UPLOAD_FOLDER` / `PROCESSED_FOLDER` | `static/uploads` / `static/processed` | Storage directories. |
 | `PORT` | `5000` | Listen port. |
+| `TLS_CERT_FILE` / `TLS_KEY_FILE` | *(unset)* | PEM certificate and key. When both are set the server serves HTTPS instead of HTTP. Setting only one is a startup error. |
+
+Uploads through the web UI are CSRF-protected: browsers must send `Sec-Fetch-Site: same-origin`, and clients that do not send `Sec-Fetch-Site` must send an `X-Requested-With` header. Scripts should use the Developer API instead. `/download-all` archives are limited to 100 distinct files and 512 MB in total.
 
 ---
 

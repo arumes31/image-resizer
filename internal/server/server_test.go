@@ -1,7 +1,9 @@
 package server
 
 import (
+	"archive/zip"
 	"bytes"
+	"fmt"
 	"image"
 	"image-resizer/internal/config"
 	"image/png"
@@ -32,7 +34,7 @@ func newTestServer(t *testing.T) *Server {
 			t.Fatal(err)
 		}
 	}
-	s := &Server{router: gin.New(), cfg: cfg, jobs: make(chan struct{}, 1)}
+	s := &Server{router: gin.New(), cfg: cfg, jobs: make(chan struct{}, 1), archives: make(chan struct{}, 1)}
 	s.setupRoutes()
 	return s
 }
@@ -67,6 +69,7 @@ func uploadRequest(t *testing.T, fields map[string]string, files map[string][]by
 	_ = mw.Close()
 	req := httptest.NewRequest(http.MethodPost, "/", &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	return req
 }
 
@@ -149,5 +152,46 @@ func TestUploadInvalidImageGenericError(t *testing.T) {
 	}
 	if strings.Contains(w.Body.String(), s.cfg.UploadFolder) {
 		t.Fatalf("error leaks server path: %s", w.Body.String())
+	}
+}
+
+func downloadAll(t *testing.T, s *Server, query string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	s.router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/download-all?files="+query, http.NoBody))
+	return w
+}
+
+func TestDownloadAllDeduplicates(t *testing.T) {
+	s := newTestServer(t)
+	for _, n := range []string{"a.png", "b.png"} {
+		if err := os.WriteFile(filepath.Join(s.cfg.ProcessedFolder, n), pngBytes(t), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := downloadAll(t, s, "a.png,a.png,b.png,a.png,missing.png")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(w.Body.Bytes()), int64(w.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(zr.File) != 2 {
+		t.Fatalf("expected 2 archive members, got %d", len(zr.File))
+	}
+}
+
+func TestDownloadAllMemberLimit(t *testing.T) {
+	s := newTestServer(t)
+	names := make([]string, maxArchiveFiles+1)
+	for i := range names {
+		names[i] = fmt.Sprintf("f%d.png", i)
+		if err := os.WriteFile(filepath.Join(s.cfg.ProcessedFolder, names[i]), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if w := downloadAll(t, s, strings.Join(names, ",")); w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", w.Code)
 	}
 }

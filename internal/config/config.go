@@ -27,6 +27,8 @@ type Config struct {
 	APIKey             string
 	UIUsername         string
 	UIPassword         string
+	TLSCertFile        string
+	TLSKeyFile         string
 	Env                string
 }
 
@@ -44,6 +46,15 @@ func LoadConfig() *Config {
 	uiPassword := getEnv("UI_PASSWORD", "")
 	if uiPassword == "" {
 		log.Println("WARNING: UI_PASSWORD is not set; the web UI and downloads are reachable without authentication.")
+	}
+
+	tlsCert := getEnv("TLS_CERT_FILE", "")
+	tlsKey := getEnv("TLS_KEY_FILE", "")
+	if (tlsCert == "") != (tlsKey == "") {
+		log.Fatal("FATAL: TLS_CERT_FILE and TLS_KEY_FILE must be set together")
+	}
+	if tlsCert == "" && (apiKey != "" || uiPassword != "") {
+		log.Println("WARNING: serving plain HTTP; credentials are only protected if a TLS-terminating reverse proxy sits in front, or set TLS_CERT_FILE/TLS_KEY_FILE.")
 	}
 
 	var trustedProxies []string
@@ -65,6 +76,8 @@ func LoadConfig() *Config {
 		APIKey:             apiKey,
 		UIUsername:         getEnv("UI_USERNAME", "admin"),
 		UIPassword:         uiPassword,
+		TLSCertFile:        tlsCert,
+		TLSKeyFile:         tlsKey,
 		Env:                env,
 	}
 }

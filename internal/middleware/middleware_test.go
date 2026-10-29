@@ -31,6 +31,41 @@ func TestRateLimiter(t *testing.T) {
 	}
 }
 
+func TestRateLimiterSweepsIdleClients(t *testing.T) {
+	now := time.Unix(0, 0)
+	rl := NewRateLimiter(60)
+	rl.now = func() time.Time { return now }
+
+	rl.Allow("a")
+	rl.Allow("b")
+	now = now.Add(2 * time.Minute)
+	rl.Allow("c")
+	if len(rl.buckets) != 1 {
+		t.Fatalf("idle buckets not swept: %d remain", len(rl.buckets))
+	}
+}
+
+func TestRateLimiterCapacity(t *testing.T) {
+	now := time.Unix(0, 0)
+	rl := NewRateLimiter(60)
+	rl.now = func() time.Time { return now }
+	rl.maxClients = 2
+
+	if !rl.Allow("a") || !rl.Allow("b") {
+		t.Fatal("clients within capacity must be allowed")
+	}
+	if rl.Allow("c") {
+		t.Fatal("new client beyond capacity must be rejected")
+	}
+	if !rl.Allow("a") {
+		t.Fatal("known clients must keep working at capacity")
+	}
+	now = now.Add(2 * time.Minute)
+	if !rl.Allow("c") {
+		t.Fatal("capacity must free up once idle buckets are swept")
+	}
+}
+
 func newTestRouter(h ...gin.HandlerFunc) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -65,21 +100,29 @@ func TestUIBasicAuth(t *testing.T) {
 
 func TestSameOrigin(t *testing.T) {
 	r := newTestRouter(SameOrigin())
-	for site, want := range map[string]int{
-		"":            http.StatusOK,
-		"same-origin": http.StatusOK,
-		"none":        http.StatusOK,
-		"cross-site":  http.StatusForbidden,
-		"same-site":   http.StatusForbidden,
+	for _, tc := range []struct {
+		site, csrf string
+		want       int
+	}{
+		{"", "", http.StatusForbidden},
+		{"", "image-resizer", http.StatusOK},
+		{"same-origin", "", http.StatusOK},
+		{"none", "", http.StatusOK},
+		{"cross-site", "", http.StatusForbidden},
+		{"cross-site", "image-resizer", http.StatusForbidden},
+		{"same-site", "", http.StatusForbidden},
 	} {
 		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
-		if site != "" {
-			req.Header.Set("Sec-Fetch-Site", site)
+		if tc.site != "" {
+			req.Header.Set("Sec-Fetch-Site", tc.site)
+		}
+		if tc.csrf != "" {
+			req.Header.Set(CSRFHeader, tc.csrf)
 		}
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		if w.Code != want {
-			t.Errorf("Sec-Fetch-Site %q: got %d, want %d", site, w.Code, want)
+		if w.Code != tc.want {
+			t.Errorf("Sec-Fetch-Site %q, %s %q: got %d, want %d", tc.site, CSRFHeader, tc.csrf, w.Code, tc.want)
 		}
 	}
 }

@@ -147,6 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/', {
                 method: 'POST',
+                // CSRF guard for browsers that omit Sec-Fetch-Site; cross-origin
+                // pages cannot set this header without a CORS preflight.
+                headers: { 'X-Requested-With': 'image-resizer' },
                 body: formData
             });
 
