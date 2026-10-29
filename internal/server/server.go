@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -31,6 +32,9 @@ const (
 	// maxConcurrentArchives bounds archives built at the same time.
 	maxConcurrentArchives = 2
 )
+
+// archiveName matches the names ProcessImage gives its outputs.
+var archiveName = regexp.MustCompile(`^[A-Za-z0-9_-][A-Za-z0-9._-]*$`)
 
 type Server struct {
 	router   *gin.Engine
@@ -139,25 +143,32 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 		return
 	}
 
+	// All file access goes through an os.Root, which refuses names that
+	// escape the processed folder (including via symlinks).
+	root, rErr := os.OpenRoot(s.cfg.ProcessedFolder)
+	if rErr != nil {
+		c.String(http.StatusInternalServerError, "Failed to create zip")
+		return
+	}
+	defer func() { _ = root.Close() }()
+
 	// Deduplicate names and size the archive before doing any work, so a
 	// short query cannot make the server copy the same large file repeatedly.
-	type member struct{ name, path string }
-	var members []member
+	var members []string
 	seen := make(map[string]bool)
 	var totalBytes int64
 	for _, name := range strings.Split(filenames, ",") {
 		safeName := filepath.Base(name)
-		if seen[safeName] {
+		if !archiveName.MatchString(safeName) || seen[safeName] {
 			continue
 		}
 		seen[safeName] = true
-		filePath := filepath.Clean(filepath.Join(s.cfg.ProcessedFolder, safeName))
-		info, err := os.Stat(filePath)
+		info, err := root.Stat(safeName)
 		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		totalBytes += info.Size()
-		members = append(members, member{name: safeName, path: filePath})
+		members = append(members, safeName)
 	}
 	if len(members) > maxArchiveFiles {
 		c.String(http.StatusRequestEntityTooLarge, fmt.Sprintf("Too many files (max %d per archive)", maxArchiveFiles))
@@ -192,18 +203,18 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 	archive := zip.NewWriter(zipFile)
 	defer func() { _ = archive.Close() }()
 
-	for _, m := range members {
+	for _, name := range members {
 		if ctx.Err() != nil {
 			return
 		}
-		file, err := os.Open(m.path)
+		file, err := root.Open(name)
 		if err != nil {
 			continue
 		}
 
 		// Processed images are already compressed; storing them avoids
 		// burning CPU on a second compression pass.
-		w, err := archive.CreateHeader(&zip.FileHeader{Name: m.name, Method: zip.Store})
+		w, err := archive.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Store})
 		if err != nil {
 			_ = file.Close()
 			continue
