@@ -1,13 +1,16 @@
 package processor
 
 import (
+	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
@@ -76,6 +79,9 @@ const (
 	MaxOutputDimension = 10000
 	// MaxOutputPixels is the largest processed image (width*height) produced.
 	MaxOutputPixels = 40_000_000
+	// MaxIntermediatePixels is the largest temporary image a resize may
+	// allocate between its horizontal and vertical passes.
+	MaxIntermediatePixels = 40_000_000
 	// maxNameLength caps the length of the user-controlled part of output names.
 	maxNameLength = 100
 )
@@ -135,6 +141,34 @@ type ProcessOptions struct {
 	RenameTemplate string
 }
 
+// knownFilters lists the filters ProcessImage applies; anything else is ignored.
+var knownFilters = map[string]bool{
+	"grayscale": true,
+	"invert":    true,
+	"sepia":     true,
+	"blur":      true,
+	"sharpen":   true,
+	"noir":      true,
+	"vivid":     true,
+	"pixelate":  true,
+}
+
+// normalizeFilters lowercases filters and drops unknown and repeated entries,
+// so each filter runs at most once per image no matter how often a request
+// lists it.
+func normalizeFilters(filters []string) []string {
+	seen := make(map[string]bool, len(knownFilters))
+	var out []string
+	for _, f := range filters {
+		f = strings.ToLower(strings.TrimSpace(f))
+		if knownFilters[f] && !seen[f] {
+			seen[f] = true
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // IsAllowedImageFile checks whether the file extension is an allowed image type.
 func IsAllowedImageFile(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
@@ -189,6 +223,9 @@ func CheckImageDimensions(path string) error {
 	}
 	defer func() { _ = f.Close() }()
 
+	if vErr := validateICO(f); vErr != nil {
+		return vErr
+	}
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidImage, err)
@@ -197,6 +234,95 @@ func CheckImageDimensions(path string) error {
 		return ErrImageTooLarge
 	}
 	return nil
+}
+
+// icoMagic is the header prefix the registered ICO decoder dispatches on.
+const icoMagic = "\x00\x00\x01\x00"
+
+// validateICO checks the directory of an ICO file against the real file size
+// before any decoder sees it. go-ico allocates each entry's declared size
+// before reading it, so a tiny file declaring huge entries would otherwise
+// trigger multi-gigabyte allocations. Detection is by content, not extension,
+// because image.DecodeConfig dispatches on magic bytes. Non-ICO files pass
+// through untouched. f is rewound to the start on success.
+func validateICO(f *os.File) error {
+	info, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	var hdr [6]byte
+	if _, rErr := io.ReadFull(f, hdr[:]); rErr != nil || string(hdr[:4]) != icoMagic {
+		// Too short or not an ICO: let the generic decoder report it.
+		_, sErr := f.Seek(0, io.SeekStart)
+		return sErr
+	}
+
+	fileSize := info.Size()
+	count := int64(binary.LittleEndian.Uint16(hdr[4:]))
+	dirEnd := int64(len(hdr)) + 16*count
+	if count == 0 || dirEnd > fileSize {
+		return fmt.Errorf("%w: malformed ICO directory", ErrInvalidImage)
+	}
+
+	var entry [16]byte
+	var total int64
+	for i := int64(0); i < count; i++ {
+		if _, rErr := io.ReadFull(f, entry[:]); rErr != nil {
+			return fmt.Errorf("%w: malformed ICO directory", ErrInvalidImage)
+		}
+		size := int64(binary.LittleEndian.Uint32(entry[8:]))
+		offset := int64(binary.LittleEndian.Uint32(entry[12:]))
+		total += size
+		// Entries must lie after the directory, inside the file, and (since
+		// the decoder reads forward only) together fit in the remaining bytes.
+		if size == 0 || offset < dirEnd || offset+size > fileSize || total > fileSize-dirEnd {
+			return fmt.Errorf("%w: ICO entry exceeds file size", ErrInvalidImage)
+		}
+	}
+
+	_, err = f.Seek(0, io.SeekStart)
+	return err
+}
+
+// resizeBounded scales img to exactly w x h. imaging.Resize runs a horizontal
+// pass first, allocating a w x srcHeight intermediate that can dwarf both the
+// input and the output for very narrow or very tall images. This picks the
+// pass order with the smaller intermediate and rejects resizes whose
+// intermediate would still exceed MaxIntermediatePixels.
+func resizeBounded(img image.Image, w, h int, filter imaging.ResampleFilter) (image.Image, error) {
+	b := img.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	// Nearest-neighbour and single-axis resizes allocate only the output.
+	if filter.Support <= 0 || srcW == w || srcH == h {
+		return imaging.Resize(img, w, h, filter), nil
+	}
+
+	horizontalFirst := int64(w) * int64(srcH)
+	verticalFirst := int64(srcW) * int64(h)
+	if min(horizontalFirst, verticalFirst) > MaxIntermediatePixels {
+		return nil, ErrOutputTooLarge
+	}
+	if horizontalFirst <= verticalFirst {
+		return imaging.Resize(img, w, h, filter), nil
+	}
+	return imaging.Resize(imaging.Resize(img, srcW, h, filter), w, h, filter), nil
+}
+
+// fillBounded scales and center-crops img to exactly w x h, like imaging.Fill.
+// imaging.Fill scales the whole image to cover the target before cropping,
+// which can allocate far more than the output; cropping the source to the
+// target aspect ratio first keeps every allocation bounded.
+func fillBounded(img image.Image, w, h int, filter imaging.ResampleFilter) (image.Image, error) {
+	b := img.Bounds()
+	srcW, srcH := b.Dx(), b.Dy()
+	cropW, cropH := srcW, srcH
+	if int64(srcW)*int64(h) > int64(srcH)*int64(w) {
+		cropW = int(int64(srcH) * int64(w) / int64(h))
+	} else {
+		cropH = int(int64(srcW) * int64(h) / int64(w))
+	}
+	cropped := imaging.CropCenter(img, max(cropW, 1), max(cropH, 1))
+	return resizeBounded(cropped, w, h, filter)
 }
 
 // safeJoin joins name onto dir and verifies the result stays inside dir.
@@ -333,8 +459,12 @@ func parseHexColor(hexStr string) (r, g, b uint8) {
 
 // ProcessImage processes the image at srcPath and writes the result into destDir.
 // origName is the client-supplied file name; it is only used (sanitized) to
-// build a readable output name.
-func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*ProcessResult, error) {
+// build a readable output name. Processing stops between steps once ctx is
+// canceled.
+func ProcessImage(ctx context.Context, srcPath, origName, destDir string, opts *ProcessOptions) (*ProcessResult, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	if !IsAllowedFormat(opts.Format) {
 		return nil, ErrInvalidFormat
 	}
@@ -350,6 +480,9 @@ func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*Pro
 	img, err := imaging.Open(srcPath, imaging.AutoOrientation(true))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open image: %w", err)
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	origWidthBeforeTransforms := img.Bounds().Dx()
@@ -396,8 +529,9 @@ func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*Pro
 				targetH = int(float64(w) * 3.0 / 4.0)
 			}
 		}
+		// The target never exceeds the image, so a plain crop is enough.
 		if targetW > 0 && targetH > 0 {
-			img = imaging.Fill(img, targetW, targetH, imaging.Center, imaging.Lanczos)
+			img = imaging.CropCenter(img, targetW, targetH)
 		}
 	}
 
@@ -418,8 +552,11 @@ func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*Pro
 	}
 
 	// 4. Filters
-	for _, filter := range opts.Filters {
-		switch strings.ToLower(filter) {
+	for _, filter := range normalizeFilters(opts.Filters) {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		switch filter {
 		case "grayscale":
 			img = imaging.Grayscale(img)
 		case "invert":
@@ -518,13 +655,20 @@ func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*Pro
 		resampleFilter = f
 	}
 
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	var resizedImg image.Image
-	// BUG-13 FIX: Use imaging.Fill for "fill" operation (social presets)
-	// which crops to exact dimensions, vs imaging.Resize which stretches.
-	if opts.Operation == "fill" && newWidth > 0 && newHeight > 0 {
-		resizedImg = imaging.Fill(img, newWidth, newHeight, imaging.Center, resampleFilter)
+	// BUG-13 FIX: Use a fill for the "fill" operation (social presets)
+	// which crops to exact dimensions, vs a resize which stretches.
+	if opts.Operation == "fill" {
+		resizedImg, err = fillBounded(img, newWidth, newHeight, resampleFilter)
 	} else {
-		resizedImg = imaging.Resize(img, newWidth, newHeight, resampleFilter)
+		resizedImg, err = resizeBounded(img, newWidth, newHeight, resampleFilter)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// 7. Watermarking
@@ -629,6 +773,10 @@ func ProcessImage(srcPath, origName, destDir string, opts *ProcessOptions) (*Pro
 				}
 			}
 		}
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	fileName := SanitizeFileName(origName)

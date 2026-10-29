@@ -3,6 +3,7 @@ package server
 import (
 	"archive/zip"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"image-resizer/internal/config"
@@ -21,11 +22,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Limits for /download-all archives.
+const (
+	// maxArchiveFiles is the most distinct files one archive may contain.
+	maxArchiveFiles = 100
+	// maxArchiveBytes caps the combined size of the files in one archive.
+	maxArchiveBytes = 512 << 20
+	// maxConcurrentArchives bounds archives built at the same time.
+	maxConcurrentArchives = 2
+)
+
 type Server struct {
-	router *gin.Engine
-	cfg    *config.Config
-	http   *http.Server
-	jobs   chan struct{} // bounds concurrent image processing
+	router   *gin.Engine
+	cfg      *config.Config
+	http     *http.Server
+	jobs     chan struct{} // bounds concurrent image processing
+	archives chan struct{} // bounds concurrent archive builds
 }
 
 func NewServer(cfg *config.Config) *Server {
@@ -47,15 +59,17 @@ func NewServer(cfg *config.Config) *Server {
 	}
 
 	s := &Server{
-		router: r,
-		cfg:    cfg,
-		jobs:   make(chan struct{}, maxJobs),
+		router:   r,
+		cfg:      cfg,
+		jobs:     make(chan struct{}, maxJobs),
+		archives: make(chan struct{}, maxConcurrentArchives),
 		http: &http.Server{
 			Addr:         ":" + cfg.Port,
 			Handler:      r,
 			ReadTimeout:  15 * time.Second,
 			WriteTimeout: 15 * time.Second,
 			IdleTimeout:  60 * time.Second,
+			TLSConfig:    &tls.Config{MinVersion: tls.VersionTLS12},
 		},
 	}
 
@@ -125,7 +139,43 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 		return
 	}
 
-	fileList := strings.Split(filenames, ",")
+	// Deduplicate names and size the archive before doing any work, so a
+	// short query cannot make the server copy the same large file repeatedly.
+	type member struct{ name, path string }
+	var members []member
+	seen := make(map[string]bool)
+	var totalBytes int64
+	for _, name := range strings.Split(filenames, ",") {
+		safeName := filepath.Base(name)
+		if seen[safeName] {
+			continue
+		}
+		seen[safeName] = true
+		filePath := filepath.Clean(filepath.Join(s.cfg.ProcessedFolder, safeName))
+		info, err := os.Stat(filePath)
+		if err != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		totalBytes += info.Size()
+		members = append(members, member{name: safeName, path: filePath})
+	}
+	if len(members) > maxArchiveFiles {
+		c.String(http.StatusRequestEntityTooLarge, fmt.Sprintf("Too many files (max %d per archive)", maxArchiveFiles))
+		return
+	}
+	if totalBytes > maxArchiveBytes {
+		c.String(http.StatusRequestEntityTooLarge, fmt.Sprintf("Archive too large (max %d MB)", maxArchiveBytes>>20))
+		return
+	}
+
+	ctx := c.Request.Context()
+	select {
+	case s.archives <- struct{}{}:
+		defer func() { <-s.archives }()
+	case <-ctx.Done():
+		return
+	}
+
 	zipName := fmt.Sprintf("processed_images_%d.zip", time.Now().Unix())
 
 	// Build the archive in a unique temp file so concurrent requests never
@@ -142,25 +192,31 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 	archive := zip.NewWriter(zipFile)
 	defer func() { _ = archive.Close() }()
 
-	for _, name := range fileList {
-		safeName := filepath.Base(name)
-		filePath := filepath.Join(s.cfg.ProcessedFolder, safeName)
-		file, err := os.Open(filepath.Clean(filePath))
+	for _, m := range members {
+		if ctx.Err() != nil {
+			return
+		}
+		file, err := os.Open(m.path)
 		if err != nil {
 			continue
 		}
 
-		w, err := archive.Create(safeName)
+		// Processed images are already compressed; storing them avoids
+		// burning CPU on a second compression pass.
+		w, err := archive.CreateHeader(&zip.FileHeader{Name: m.name, Method: zip.Store})
 		if err != nil {
 			_ = file.Close()
 			continue
 		}
 
-		if _, err := io.Copy(w, file); err != nil {
-			_ = file.Close()
-			continue
-		}
+		_, err = io.Copy(w, &ctxReader{ctx: ctx, r: file})
 		_ = file.Close()
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			continue
+		}
 	}
 
 	// Must close writers before serving the file
@@ -170,6 +226,19 @@ func (s *Server) handleDownloadAll(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", zipName))
 	c.File(zipPath)
 
+}
+
+// ctxReader stops a copy as soon as its context is canceled.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (r *ctxReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.r.Read(p)
 }
 
 // publicError maps a processing error to a message that is safe to return to
@@ -386,9 +455,13 @@ func (s *Server) handleUpload(c *gin.Context) {
 			_ = os.Remove(uploadPath)
 			return
 		}
-		res, err := processor.ProcessImage(uploadPath, file.Filename, s.cfg.ProcessedFolder, &opts)
+		res, err := processor.ProcessImage(c.Request.Context(), uploadPath, file.Filename, s.cfg.ProcessedFolder, &opts)
 		<-s.jobs
 		_ = os.Remove(uploadPath)
+		if c.Request.Context().Err() != nil {
+			// The client is gone; skip the remaining files.
+			return
+		}
 		if err != nil {
 			log.Printf("failed to process %s: %v", filename, err)
 			errs = append(errs, fmt.Sprintf("failed to process %s: %s", filename, publicError(err)))
@@ -469,8 +542,12 @@ func (s *Server) cleanupFiles(dir string, maxAge time.Duration) {
 	}
 }
 
-// Start begins listening on the configured port.
+// Start begins listening on the configured port, serving HTTPS when a
+// certificate and key are configured.
 func (s *Server) Start() error {
+	if s.cfg.TLSCertFile != "" {
+		return s.http.ListenAndServeTLS(s.cfg.TLSCertFile, s.cfg.TLSKeyFile)
+	}
 	return s.http.ListenAndServe()
 }
 
