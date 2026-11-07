@@ -57,3 +57,8 @@ Desktop.ini
 # Qodo/Continue working directories
 .qodo/
 .continue/
+
+# Documentation and scratch
+docs/
+scratch/
+
