@@ -1,9 +1,9 @@
 # <img src="web/static/assets/logo.svg" width="48" height="48" valign="middle"> Image Resizer
 
-![Build Status](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/build.yml?branch=v0.5&style=for-the-badge&logo=github&label=Build)
-![Security Audit](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/security.yml?branch=v0.5&style=for-the-badge&logo=pre-commit&label=Security)
-![Linting](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/lint.yml?branch=v0.5&style=for-the-badge&logo=go&label=Lint)
-![Go Version](https://img.shields.io/badge/Go-1.26.4-00ADD8?style=for-the-badge&logo=go)
+![Build Status](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/build.yml?branch=main&style=for-the-badge&logo=github&label=Build)
+![Security Audit](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/security.yml?branch=main&style=for-the-badge&logo=pre-commit&label=Security)
+![Linting](https://img.shields.io/github/actions/workflow/status/arumes31/image-resizer/lint.yml?branch=main&style=for-the-badge&logo=go&label=Lint)
+![Go Version](https://img.shields.io/badge/Go-1.26.10-00ADD8?style=for-the-badge&logo=go)
 ![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)
 
 **High-performance, secure, and modern image processing suite built with Go and Gin-Gonic.**
@@ -53,8 +53,8 @@ graph TD
 
 ## 🛠️ Tech Stack
 
-- **Backend:** [Go 1.26.4+](https://go.dev/) + [Gin-Gonic](https://gin-gonic.com/)
-- **Processing:** [Imaging](https://github.com/disintegration/imaging), [Freetype](https://github.com/golang/freetype), [Gofpdf](https://github.com/jung-kurt/gofpdf)
+- **Backend:** [Go 1.26.10+](https://go.dev/) (Docker: Go 1.27.3) + [Gin-Gonic](https://gin-gonic.com/)
+- **Processing:** [Imaging](https://github.com/disintegration/imaging), [Freetype](https://github.com/golang/freetype), [Gofpdf](https://github.com/jung-kurt/gofpdf), [chai2010/webp](https://github.com/chai2010/webp) (CGO), [go-ico](https://github.com/sergeymakinen/go-ico)
 - **Frontend:** Glassmorphism UI (Vanilla CSS + Vanilla JS)
 - **DevOps:** GitHub Actions, Docker (Alpine Multi-stage), [gosec](https://github.com/securego/gosec), [govulncheck](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck)
 
@@ -198,6 +198,7 @@ Processed files are named with a random 128-bit suffix and can be fetched via `/
 - **Privacy:** One-click EXIF stripping removes metadata (GPS, Timestamps).
 - **Safety:** Constant-time comparison for API keys; request body cap, file count limit, per-IP rate limit and processing concurrency limit; images over 40 megapixels (input or output) are rejected before decoding to prevent decompression bombs.
 - **Isolation:** Uploads and outputs use random, unguessable names; rename templates cannot introduce path components.
+- **Automatic Cleanup:** A background worker runs hourly to purge uploaded source images older than 1 hour and processed images older than 12 hours.
 - **Audited:** Scanned with `gosec` and `govulncheck` on every commit.
 
 ---
