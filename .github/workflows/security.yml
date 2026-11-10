@@ -3,8 +3,14 @@ name: Security & Vulnerability Scan
 on:
   push:
     branches: [ main, v0.5, v2_test ]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**/*.md'
+      - 'LICENSE'
 
 permissions:
   contents: read
@@ -16,6 +22,7 @@ concurrency:
 jobs:
   security:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
