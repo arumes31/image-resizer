@@ -22,7 +22,7 @@ FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5
 WORKDIR /app
 
 # Install fonts for text overlay and ca-certificates for HTTPS
-RUN apk add --no-cache ttf-dejavu ca-certificates
+RUN apk add --no-cache ttf-dejavu ca-certificates 'libcrypto3>=3.5.9-r1' 'libssl3>=3.5.9-r1' 'zlib>=1.4-r0'
 
 # Copy binary from builder
 COPY --from=builder /app/image-resizer .
